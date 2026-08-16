@@ -1,0 +1,15 @@
+#!/bin/sh
+
+# Minimal POSIX Gradle launcher. The wrapper JAR controls the pinned Gradle version.
+APP_HOME=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P) || exit 1
+
+if [ -n "$JAVA_HOME" ]; then
+    JAVA_EXE="$JAVA_HOME/bin/java"
+else
+    JAVA_EXE=java
+fi
+
+exec "$JAVA_EXE" \
+    -Dorg.gradle.appname=gradlew \
+    -classpath "$APP_HOME/gradle/wrapper/gradle-wrapper.jar" \
+    org.gradle.wrapper.GradleWrapperMain "$@"

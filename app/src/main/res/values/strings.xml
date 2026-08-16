@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Jarboa</string>
+    <string name="connection_channel_name">Connection</string>
+    <string name="message_channel_name">Messages</string>
+    <string name="connection_notification_title">Jarboa connection service</string>
+    <string name="connection_notification_text">Maintaining the XMPP session</string>
+</resources>
