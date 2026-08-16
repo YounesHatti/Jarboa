@@ -18,12 +18,12 @@ val hasReleaseSigning = listOf(
 
 android {
     namespace = "com.youneshatti.jarboa"
-    compileSdk = 37
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.youneshatti.jarboa"
         minSdk = 28
-        targetSdk = 37
+        targetSdk = 36
         versionCode = providers.gradleProperty("VERSION_CODE").orNull?.toIntOrNull() ?: 1
         versionName = providers.gradleProperty("VERSION_NAME").orNull ?: "0.1.0"
 
@@ -85,6 +85,7 @@ room {
 
 dependencies {
     val composeBom = platform("androidx.compose:compose-bom:2026.06.01")
+    val lifecycleVersion = "2.10.0"
     val smackVersion = "4.4.8"
     val roomVersion = "2.8.4"
 
@@ -96,15 +97,18 @@ dependencies {
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-core")
     implementation("androidx.compose.ui:ui-tooling-preview")
-    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.11.0")
-    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.11.0")
-    implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.11.0")
+    implementation("androidx.lifecycle:lifecycle-runtime-compose:$lifecycleVersion")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:$lifecycleVersion")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:$lifecycleVersion")
     implementation("androidx.room:room-runtime:$roomVersion")
     implementation("androidx.room:room-ktx:$roomVersion")
     ksp("androidx.room:room-compiler:$roomVersion")
 
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
-    implementation("org.igniterealtime.smack:smack-android:$smackVersion")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0")
+    implementation("org.igniterealtime.smack:smack-android:$smackVersion") {
+        // Smack 4.4.8 publishes both XPP3 variants; the full jar is a superset.
+        exclude(group = "xpp3", module = "xpp3_min")
+    }
     implementation("org.igniterealtime.smack:smack-tcp:$smackVersion")
     implementation("org.igniterealtime.smack:smack-im:$smackVersion")
     implementation("org.igniterealtime.smack:smack-extensions:$smackVersion")
@@ -113,7 +117,7 @@ dependencies {
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 
     testImplementation("junit:junit:4.13.2")
-    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2")
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.11.0")
     androidTestImplementation("androidx.test.ext:junit:1.3.0")
     androidTestImplementation("androidx.test:runner:1.7.0")
     androidTestImplementation("androidx.room:room-testing:$roomVersion")

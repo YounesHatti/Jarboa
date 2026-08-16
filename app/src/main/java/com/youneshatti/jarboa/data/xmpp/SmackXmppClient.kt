@@ -16,6 +16,7 @@ import kotlinx.coroutines.withContext
 import org.jivesoftware.smack.AbstractConnectionListener
 import org.jivesoftware.smack.ConnectionConfiguration
 import org.jivesoftware.smack.ReconnectionManager
+import org.jivesoftware.smack.ReconnectionListener
 import org.jivesoftware.smack.SmackException
 import org.jivesoftware.smack.XMPPConnection
 import org.jivesoftware.smack.XMPPException
@@ -151,15 +152,18 @@ class SmackXmppClient : XmppClient {
             override fun connectionClosedOnError(error: Exception) {
                 state.value = error.toFailureState()
             }
-
-            override fun reconnectingIn(seconds: Int) {
-                state.value = XmppConnectionState.Reconnecting(seconds)
-            }
-
-            override fun reconnectionFailed(error: Exception) {
-                state.value = error.toFailureState()
-            }
         })
+        ReconnectionManager.getInstanceFor(activeConnection).addReconnectionListener(
+            object : ReconnectionListener {
+                override fun reconnectingIn(seconds: Int) {
+                    state.value = XmppConnectionState.Reconnecting(seconds)
+                }
+
+                override fun reconnectionFailed(error: Exception) {
+                    state.value = error.toFailureState()
+                }
+            },
+        )
     }
 
     private fun disconnectCurrent() {

@@ -6,7 +6,6 @@ import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontFamily
 
 private val JarboaColors: ColorScheme = darkColorScheme(
     primary = Color.White,
@@ -30,7 +29,7 @@ private val JarboaColors: ColorScheme = darkColorScheme(
 fun JarboaTheme(content: @Composable () -> Unit) {
     MaterialTheme(
         colorScheme = JarboaColors,
-        typography = Typography(defaultFontFamily = FontFamily.SansSerif),
+        typography = Typography(),
         content = content,
     )
 }

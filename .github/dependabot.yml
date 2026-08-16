@@ -5,6 +5,12 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    ignore:
+      # These lines require the Android 17 preview compile SDK. Revisit when API 37 is stable.
+      - dependency-name: "androidx.core:core-ktx"
+        versions: [">= 1.19.0"]
+      - dependency-name: "androidx.lifecycle:*"
+        versions: [">= 2.11.0"]
   - package-ecosystem: github-actions
     directory: /
     schedule:
