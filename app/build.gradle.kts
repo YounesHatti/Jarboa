@@ -105,7 +105,10 @@ dependencies {
     ksp("androidx.room:room-compiler:$roomVersion")
 
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0")
-    implementation("org.igniterealtime.smack:smack-android:$smackVersion")
+    implementation("org.igniterealtime.smack:smack-android:$smackVersion") {
+        // Smack 4.4.8 publishes both XPP3 variants; the full jar is a superset.
+        exclude(group = "xpp3", module = "xpp3_min")
+    }
     implementation("org.igniterealtime.smack:smack-tcp:$smackVersion")
     implementation("org.igniterealtime.smack:smack-im:$smackVersion")
     implementation("org.igniterealtime.smack:smack-extensions:$smackVersion")
