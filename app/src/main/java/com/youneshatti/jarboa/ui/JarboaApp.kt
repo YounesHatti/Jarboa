@@ -1,5 +1,7 @@
 package com.youneshatti.jarboa.ui
 
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -11,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -54,6 +57,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -63,6 +67,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.youneshatti.jarboa.BuildConfig
 import com.youneshatti.jarboa.MainViewModel
+import com.youneshatti.jarboa.R
 import com.youneshatti.jarboa.domain.model.Conversation
 import com.youneshatti.jarboa.domain.model.DirectMessage
 import com.youneshatti.jarboa.domain.model.MessageStatus
@@ -200,18 +205,17 @@ private fun SignInScreen(
 
 @Composable
 private fun JarboaMark() {
-    Box(
-        modifier = Modifier.size(72.dp).clip(CircleShape).background(Color.White),
-        contentAlignment = Alignment.Center,
+    Surface(
+        modifier = Modifier.size(72.dp),
+        shape = CircleShape,
+        color = Color.Black,
+        border = BorderStroke(1.dp, Color.White),
     ) {
-        Box(
-            modifier = Modifier.size(width = 42.dp, height = 34.dp)
-                .clip(RoundedCornerShape(8.dp))
-                .background(Color.Black),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text("J", color = Color.White, fontWeight = FontWeight.Black)
-        }
+        Image(
+            painter = painterResource(R.drawable.ic_launcher_foreground),
+            contentDescription = null,
+            modifier = Modifier.fillMaxSize(),
+        )
     }
 }
 
@@ -401,7 +405,10 @@ private fun ConversationScreen(
         },
         bottomBar = {
             Row(
-                modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(12.dp),
+                modifier = Modifier.fillMaxWidth()
+                    .navigationBarsPadding()
+                    .imePadding()
+                    .padding(12.dp),
                 verticalAlignment = Alignment.Bottom,
             ) {
                 OutlinedTextField(
