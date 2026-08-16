@@ -8,7 +8,7 @@ All notable Jarboa changes will be recorded here. The project follows semantic v
 
 ### Changed
 
-- Use the exact supplied running-jerboa artwork for the in-app mark and Android launcher icons.
+- Use the exact supplied running-jerboa artwork on pure black for the in-app mark and Android launcher icons.
 
 ## [0.1.3] - 2026-08-16
 
