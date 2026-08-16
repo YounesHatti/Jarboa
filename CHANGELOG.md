@@ -16,6 +16,7 @@ All notable Jarboa changes will be recorded here. The project follows semantic v
 - Explicit unencrypted-chat labeling ahead of the OMEMO milestone.
 - CI, signed-release workflow, security policy, architecture, and release documentation.
 - Stable Android API 36 production baseline.
+- AndroidX Core and Lifecycle pinned to the stable-SDK-compatible release lines.
 
 [Unreleased]: https://github.com/YounesHatti/Jarboa/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/YounesHatti/Jarboa/releases/tag/v0.1.0
