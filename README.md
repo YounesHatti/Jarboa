@@ -21,9 +21,9 @@ Roster contacts, OMEMO, attachments, groups, calls, and multi-account support ar
 
 ## Install and updates
 
-Releases will be published only on this repository's [GitHub Releases](https://github.com/YounesHatti/Jarboa/releases) page. GrapheneOS users can add `https://github.com/YounesHatti/Jarboa` to [Obtainium](https://obtainium.imranr.dev/) for release monitoring.
+Signed releases are published only on this repository's [GitHub Releases](https://github.com/YounesHatti/Jarboa/releases) page. GrapheneOS users can add `https://github.com/YounesHatti/Jarboa` to [Obtainium](https://obtainium.imranr.dev/) for installation and updates.
 
-There is no production release yet. APKs from pull-request CI are debug artifacts and are not a trusted update channel.
+Install the versioned `Jarboa-X.Y.Z.apk` release asset. The adjacent `.sha256` file can be used to verify the download. APKs from pull-request CI are debug artifacts and are not a trusted update channel.
 
 ## Build
 

@@ -38,7 +38,12 @@ jobs:
           SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
         run: |
           VERSION_NAME="${GITHUB_REF_NAME#v}"
-          ./gradlew --no-daemon lintRelease testDebugUnitTest assembleRelease -PVERSION_NAME="$VERSION_NAME" --stacktrace
+          if [[ ! "$VERSION_NAME" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+            echo "Release tag must use vMAJOR.MINOR.PATCH."
+            exit 1
+          fi
+          VERSION_CODE=$((10#${BASH_REMATCH[1]} * 1000000 + 10#${BASH_REMATCH[2]} * 1000 + 10#${BASH_REMATCH[3]}))
+          ./gradlew --no-daemon lintRelease testDebugUnitTest assembleRelease -PVERSION_NAME="$VERSION_NAME" -PVERSION_CODE="$VERSION_CODE" --stacktrace
           mv app/build/outputs/apk/release/app-release.apk "Jarboa-$VERSION_NAME.apk"
           sha256sum "Jarboa-$VERSION_NAME.apk" > "Jarboa-$VERSION_NAME.apk.sha256"
       - name: Publish GitHub release
