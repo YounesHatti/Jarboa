@@ -38,18 +38,35 @@ jobs:
           SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
         run: |
           VERSION_NAME="${GITHUB_REF_NAME#v}"
-          if [[ ! "$VERSION_NAME" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
-            echo "Release tag must use vMAJOR.MINOR.PATCH."
+          if [[ ! "$VERSION_NAME" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)(-beta\.([0-9]+))?$ ]]; then
+            echo "Release tag must use vMAJOR.MINOR.PATCH or vMAJOR.MINOR.PATCH-beta.NUMBER."
             exit 1
           fi
-          VERSION_CODE=$((10#${BASH_REMATCH[1]} * 1000000 + 10#${BASH_REMATCH[2]} * 1000 + 10#${BASH_REMATCH[3]}))
+          MAJOR=$((10#${BASH_REMATCH[1]}))
+          MINOR=$((10#${BASH_REMATCH[2]}))
+          PATCH=$((10#${BASH_REMATCH[3]}))
+          if [[ -n "${BASH_REMATCH[5]}" ]]; then
+            SLOT=$((10#${BASH_REMATCH[5]}))
+            if (( SLOT < 1 || SLOT > 98 )); then
+              echo "Beta number must be between 1 and 98."
+              exit 1
+            fi
+          else
+            SLOT=99
+          fi
+          VERSION_CODE=$((MAJOR * 100000000 + MINOR * 100000 + PATCH * 100 + SLOT))
           ./gradlew --no-daemon lintRelease testDebugUnitTest assembleRelease -PVERSION_NAME="$VERSION_NAME" -PVERSION_CODE="$VERSION_CODE" --stacktrace
           mv app/build/outputs/apk/release/app-release.apk "Jarboa-$VERSION_NAME.apk"
           sha256sum "Jarboa-$VERSION_NAME.apk" > "Jarboa-$VERSION_NAME.apk.sha256"
       - name: Publish GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" Jarboa-*.apk Jarboa-*.apk.sha256 --verify-tag --generate-notes --title "Jarboa $GITHUB_REF_NAME"
+        run: |
+          RELEASE_FLAGS=(--verify-tag --generate-notes --title "Jarboa $GITHUB_REF_NAME")
+          if [[ "$GITHUB_REF_NAME" == *-beta.* ]]; then
+            RELEASE_FLAGS+=(--prerelease)
+          fi
+          gh release create "$GITHUB_REF_NAME" Jarboa-*.apk Jarboa-*.apk.sha256 "${RELEASE_FLAGS[@]}"
       - name: Remove signing material
         if: always()
         run: rm -f signing/release.jks

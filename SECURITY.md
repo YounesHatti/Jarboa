@@ -2,9 +2,9 @@
 
 ## Development status
 
-Jarboa 0.1.x is a pre-production transport milestone. It requires authenticated TLS for the client-to-server connection but does not provide end-to-end encryption. Your XMPP service operator can read message bodies in this phase.
+Jarboa 0.2.0-beta.1 is a test release of direct-chat OMEMO. It encrypts outgoing direct messages only after at least one recipient device accepts the ciphertext and never falls back to plaintext. Incoming plaintext remains visible for compatibility and is labeled unencrypted.
 
-Do not report the absence of OMEMO in 0.1.x as a vulnerability; it is a visible, documented limitation. A claim that a conversation is encrypted when it is not, a TLS bypass, credential exposure, or local database exposure should be reported immediately.
+The beta uses Smack's `eu.siacs.conversations.axolotl` OMEMO implementation for interoperability with established Android XMPP clients. It has not received an independent audit. An incorrect encrypted label, plaintext fallback, key-change bypass, TLS bypass, credential exposure, or local database exposure should be reported immediately.
 
 ## Reporting a vulnerability
 
@@ -20,17 +20,21 @@ Jarboa currently protects:
 
 - the client-to-server connection with required TLS, platform trust anchors, and hostname verification;
 - the saved password with a non-exportable Android Keystore AES-GCM key;
+- direct-message bodies from the XMPP server when OMEMO is available and the recipient device list is accepted;
+- key continuity by blocking changed device fingerprints until an explicit decision;
 - notification content by hiding sender and body text by default;
 - app data from Android backup and cleartext network traffic.
 
-Jarboa does not currently protect:
+Jarboa does not protect:
 
-- message content from the XMPP server operator;
+- plaintext messages received from other clients or legacy 0.1.x history;
 - a device that is unlocked or controlled by an attacker;
 - message metadata such as account addresses, timing, and server IP addresses;
 - screenshots, keyboard learning, accessibility services, or notification access granted to other apps.
 
-The Room database is app-sandboxed but not separately encrypted in 0.1.0. Signing out erases its tables and deletes the credential key.
+The Room database and OMEMO key files are app-sandboxed but not separately encrypted. Android/GrapheneOS file-based encryption protects them while the device is locked. Signing out erases message tables, credentials, trust decisions, and local OMEMO keys.
+
+Verify device fingerprints through a separate trusted channel before treating a contact as verified. “Encrypted, unverified” protects against passive server reading but does not rule out a malicious first-key substitution. OMEMO does not hide addresses, timing, server IPs, device compromise, screenshots, keyboards, accessibility services, or notification access.
 
 ## Release authenticity
 
