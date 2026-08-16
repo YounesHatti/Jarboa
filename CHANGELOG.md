@@ -4,6 +4,12 @@ All notable Jarboa changes will be recorded here. The project follows semantic v
 
 ## [Unreleased]
 
+## [0.1.4] - 2026-08-16
+
+### Changed
+
+- Use the exact supplied running-jerboa artwork on pure black for the in-app mark and Android launcher icons.
+
 ## [0.1.3] - 2026-08-16
 
 ### Changed
@@ -43,7 +49,8 @@ All notable Jarboa changes will be recorded here. The project follows semantic v
 - Stable Android API 36 production baseline.
 - AndroidX Core and Lifecycle pinned to the stable-SDK-compatible release lines.
 
-[Unreleased]: https://github.com/YounesHatti/Jarboa/compare/v0.1.3...HEAD
+[Unreleased]: https://github.com/YounesHatti/Jarboa/compare/v0.1.4...HEAD
+[0.1.4]: https://github.com/YounesHatti/Jarboa/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/YounesHatti/Jarboa/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/YounesHatti/Jarboa/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/YounesHatti/Jarboa/compare/v0.1.0...v0.1.1
