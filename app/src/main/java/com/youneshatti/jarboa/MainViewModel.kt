@@ -8,6 +8,10 @@ import androidx.lifecycle.viewModelScope
 import com.youneshatti.jarboa.domain.model.AccountConfig
 import com.youneshatti.jarboa.domain.model.Conversation
 import com.youneshatti.jarboa.domain.model.DirectMessage
+import com.youneshatti.jarboa.domain.model.OmemoContactSecurity
+import com.youneshatti.jarboa.domain.model.OmemoContactStatus
+import com.youneshatti.jarboa.domain.model.OmemoSessionState
+import com.youneshatti.jarboa.domain.model.OmemoTrustLevel
 import com.youneshatti.jarboa.domain.model.XmppConnectionState
 import com.youneshatti.jarboa.domain.validation.JidValidationResult
 import com.youneshatti.jarboa.domain.validation.XmppAddressValidator
@@ -17,6 +21,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -28,19 +33,32 @@ class MainViewModel(
     private val mutableBusy = MutableStateFlow(false)
     private val mutableError = MutableStateFlow<String?>(null)
     private val mutableSelectedConversation = MutableStateFlow<String?>(null)
+    private val mutableContactSecurity = MutableStateFlow<OmemoContactSecurity?>(null)
     private val mutableNotificationPrivacy = MutableStateFlow(container.settingsStore.hideNotificationContent)
 
     val signedIn: StateFlow<Boolean> = mutableSignedIn.asStateFlow()
     val busy: StateFlow<Boolean> = mutableBusy.asStateFlow()
     val error: StateFlow<String?> = mutableError.asStateFlow()
     val selectedConversation: StateFlow<String?> = mutableSelectedConversation.asStateFlow()
+    val contactSecurity: StateFlow<OmemoContactSecurity?> = mutableContactSecurity.asStateFlow()
     val hideNotificationContent: StateFlow<Boolean> = mutableNotificationPrivacy.asStateFlow()
     val connectionState: StateFlow<XmppConnectionState> = container.xmppClient.connectionState
+    val omemoState: StateFlow<OmemoSessionState> = container.xmppClient.omemoState
     val conversations: StateFlow<List<Conversation>> = container.messageRepository.conversations.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5_000),
         initialValue = emptyList(),
     )
+
+    init {
+        viewModelScope.launch {
+            connectionState.collect { state ->
+                if (state is XmppConnectionState.Connected) {
+                    mutableSelectedConversation.value?.let(::refreshContactSecurity)
+                }
+            }
+        }
+    }
 
     fun messages(jid: String): Flow<List<DirectMessage>> = container.messageRepository.messages(jid)
 
@@ -96,10 +114,39 @@ class MainViewModel(
         }
         mutableSelectedConversation.value = normalized
         viewModelScope.launch { container.messageRepository.markConversationRead(normalized) }
+        refreshContactSecurity(normalized)
     }
 
     fun closeConversation() {
         mutableSelectedConversation.value = null
+        mutableContactSecurity.value = null
+    }
+
+    fun refreshContactSecurity(jid: String) {
+        mutableContactSecurity.value = OmemoContactSecurity.checking(jid)
+        viewModelScope.launch {
+            val security = runCatching { container.xmppClient.loadContactSecurity(jid) }
+                .getOrElse { failure ->
+                    OmemoContactSecurity(
+                        jid = jid,
+                        status = OmemoContactStatus.UNAVAILABLE,
+                        detail = failure.message ?: "OMEMO device information could not be loaded.",
+                    )
+                }
+            if (mutableSelectedConversation.value == jid) mutableContactSecurity.value = security
+        }
+    }
+
+    fun setDeviceTrust(jid: String, deviceId: Int, fingerprint: String, trust: OmemoTrustLevel) {
+        viewModelScope.launch {
+            runCatching { container.xmppClient.setDeviceTrust(jid, deviceId, fingerprint, trust) }
+                .onSuccess { security ->
+                    if (mutableSelectedConversation.value == jid) mutableContactSecurity.value = security
+                }
+                .onFailure { failure ->
+                    mutableError.value = failure.message ?: "The OMEMO trust decision could not be saved."
+                }
+        }
     }
 
     fun sendMessage(recipientJid: String, body: String) {
@@ -128,6 +175,7 @@ class MainViewModel(
             XmppConnectionService.stop(getApplication())
             runCatching { container.signOut() }
             mutableSelectedConversation.value = null
+            mutableContactSecurity.value = null
             mutableSignedIn.value = false
             mutableBusy.value = false
         }

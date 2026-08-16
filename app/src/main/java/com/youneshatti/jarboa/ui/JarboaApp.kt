@@ -71,7 +71,13 @@ import com.youneshatti.jarboa.MainViewModel
 import com.youneshatti.jarboa.R
 import com.youneshatti.jarboa.domain.model.Conversation
 import com.youneshatti.jarboa.domain.model.DirectMessage
+import com.youneshatti.jarboa.domain.model.MessageEncryption
 import com.youneshatti.jarboa.domain.model.MessageStatus
+import com.youneshatti.jarboa.domain.model.OmemoContactSecurity
+import com.youneshatti.jarboa.domain.model.OmemoContactStatus
+import com.youneshatti.jarboa.domain.model.OmemoDeviceInfo
+import com.youneshatti.jarboa.domain.model.OmemoSessionStatus
+import com.youneshatti.jarboa.domain.model.OmemoTrustLevel
 import com.youneshatti.jarboa.domain.model.XmppConnectionState
 import com.youneshatti.jarboa.domain.validation.JidValidationResult
 import com.youneshatti.jarboa.domain.validation.XmppAddressValidator
@@ -195,7 +201,7 @@ private fun SignInScreen(
             }
             Spacer(Modifier.height(16.dp))
             Text(
-                "TLS certificate validation is required. This first release does not yet provide OMEMO end-to-end encryption.",
+                "TLS certificate validation and OMEMO initialization are required before Jarboa connects.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -379,8 +385,11 @@ private fun ConversationScreen(
     connectionState: XmppConnectionState,
 ) {
     val messages by viewModel.messages(jid).collectAsStateWithLifecycle(initialValue = emptyList())
+    val contactSecurity by viewModel.contactSecurity.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
     var draft by rememberSaveable(jid) { mutableStateOf("") }
+    var showSecurityDetails by rememberSaveable(jid) { mutableStateOf(false) }
+    val security = contactSecurity?.takeIf { it.jid == jid } ?: OmemoContactSecurity.checking(jid)
     LaunchedEffect(messages.size) {
         if (messages.isNotEmpty()) listState.animateScrollToItem(messages.lastIndex)
     }
@@ -410,12 +419,15 @@ private fun ConversationScreen(
                     value = draft,
                     onValueChange = { draft = it.take(4096) },
                     modifier = Modifier.weight(1f),
-                    placeholder = { Text("Message") },
+                    enabled = security.canSend && connectionState is XmppConnectionState.Connected,
+                    placeholder = { Text(if (security.canSend) "Message" else "Waiting for OMEMO") },
                     maxLines = 4,
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
                     keyboardActions = KeyboardActions(onSend = {
-                        viewModel.sendMessage(jid, draft)
-                        draft = ""
+                        if (security.canSend) {
+                            viewModel.sendMessage(jid, draft)
+                            draft = ""
+                        }
                     }),
                 )
                 Spacer(Modifier.width(10.dp))
@@ -424,7 +436,7 @@ private fun ConversationScreen(
                         viewModel.sendMessage(jid, draft)
                         draft = ""
                     },
-                    enabled = draft.isNotBlank() && connectionState is XmppConnectionState.Connected,
+                    enabled = draft.isNotBlank() && security.canSend && connectionState is XmppConnectionState.Connected,
                     modifier = Modifier.height(56.dp),
                 ) { Text("Send") }
             }
@@ -432,14 +444,10 @@ private fun ConversationScreen(
         containerColor = Color.Black,
     ) { padding ->
         Column(modifier = Modifier.padding(padding).fillMaxSize()) {
-            Surface(color = Color(0xFF2A2418), contentColor = Color(0xFFFFE0A3)) {
-                Text(
-                    "UNENCRYPTED · OMEMO IS PLANNED FOR PHASE 0.2.0",
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 9.dp),
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.Bold,
-                )
-            }
+            OmemoSecurityBanner(
+                security = security,
+                onClick = { showSecurityDetails = true },
+            )
             if (messages.isEmpty()) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Text("Start the conversation", color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -456,6 +464,102 @@ private fun ConversationScreen(
             }
         }
     }
+
+    if (showSecurityDetails) {
+        OmemoSecurityDialog(
+            security = security,
+            onDismiss = { showSecurityDetails = false },
+            onRefresh = { viewModel.refreshContactSecurity(jid) },
+            onTrust = { device, trust ->
+                viewModel.setDeviceTrust(jid, device.deviceId, device.fingerprint, trust)
+            },
+        )
+    }
+}
+
+@Composable
+private fun OmemoSecurityBanner(security: OmemoContactSecurity, onClick: () -> Unit) {
+    val (label, colors) = when {
+        security.status == OmemoContactStatus.CHECKING ->
+            "OMEMO · CHECKING DEVICES" to (Color(0xFF1E1E1E) to Color.White)
+        security.hasChangedIdentity ->
+            "OMEMO · KEY CHANGED · SENDING BLOCKED" to (Color(0xFF3A1515) to Color(0xFFFFB4AB))
+        security.status == OmemoContactStatus.UNAVAILABLE ->
+            "OMEMO UNAVAILABLE · SENDING BLOCKED" to (Color(0xFF2A2418) to Color(0xFFFFE0A3))
+        security.usableDevices.isEmpty() ->
+            "OMEMO · NO TRUSTED DEVICES · SENDING BLOCKED" to (Color(0xFF2A2418) to Color(0xFFFFE0A3))
+        security.allUsableDevicesVerified ->
+            "OMEMO · VERIFIED" to (Color(0xFF102319) to Color(0xFFB9F6CA))
+        else ->
+            "OMEMO · ENCRYPTED · DEVICES UNVERIFIED" to (Color(0xFF1E1E1E) to Color.White)
+    }
+    Surface(
+        color = colors.first,
+        contentColor = colors.second,
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
+    ) {
+        Text(
+            label,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 9.dp),
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Bold,
+        )
+    }
+}
+
+@Composable
+private fun OmemoSecurityDialog(
+    security: OmemoContactSecurity,
+    onDismiss: () -> Unit,
+    onRefresh: () -> Unit,
+    onTrust: (OmemoDeviceInfo, OmemoTrustLevel) -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("OMEMO devices") },
+        text = {
+            LazyColumn(
+                modifier = Modifier.heightIn(max = 460.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
+                item {
+                    Text(
+                        security.detail ?: "Compare fingerprints with your contact using another trusted channel.",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                items(security.devices, key = OmemoDeviceInfo::deviceId) { device ->
+                    Column {
+                        Text("Device ${device.deviceId} · ${device.trust.label}", fontWeight = FontWeight.Bold)
+                        Text(
+                            device.fingerprint.blocksOfEight(),
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        if (device.trust == OmemoTrustLevel.CHANGED && device.previousFingerprint != null) {
+                            Spacer(Modifier.height(5.dp))
+                            Text(
+                                "Previous: ${device.previousFingerprint.blocksOfEight()}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color(0xFFFFB4AB),
+                            )
+                        }
+                        Row {
+                            TextButton(
+                                onClick = { onTrust(device, OmemoTrustLevel.VERIFIED) },
+                                enabled = device.trust != OmemoTrustLevel.VERIFIED,
+                            ) { Text(if (device.trust == OmemoTrustLevel.CHANGED) "Trust new key" else "Mark verified") }
+                            TextButton(
+                                onClick = { onTrust(device, OmemoTrustLevel.REJECTED) },
+                                enabled = device.trust != OmemoTrustLevel.REJECTED,
+                            ) { Text("Distrust") }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Done") } },
+        dismissButton = { TextButton(onClick = onRefresh) { Text("Refresh") } },
+    )
 }
 
 @Composable
@@ -473,6 +577,8 @@ private fun MessageBubble(message: DirectMessage) {
             Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
                 Text(message.body)
                 Row(modifier = Modifier.align(Alignment.End), verticalAlignment = Alignment.CenterVertically) {
+                    Text(message.encryption.label, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.width(7.dp))
                     Text(formatMessageTime(message.timestamp), style = MaterialTheme.typography.labelSmall)
                     if (message.outgoing) {
                         Spacer(Modifier.width(7.dp))
@@ -492,6 +598,23 @@ private val MessageStatus.label: String
         MessageStatus.FAILED -> "FAILED"
     }
 
+private val MessageEncryption.label: String
+    get() = when (this) {
+        MessageEncryption.LEGACY_PLAINTEXT -> "LEGACY PLAINTEXT"
+        MessageEncryption.UNENCRYPTED_INCOMING -> "UNENCRYPTED"
+        MessageEncryption.OMEMO_UNVERIFIED -> "OMEMO"
+        MessageEncryption.OMEMO_VERIFIED -> "OMEMO VERIFIED"
+        MessageEncryption.OMEMO_KEY_CHANGED -> "OMEMO KEY CHANGED"
+    }
+
+private val OmemoTrustLevel.label: String
+    get() = when (this) {
+        OmemoTrustLevel.UNVERIFIED -> "unverified"
+        OmemoTrustLevel.VERIFIED -> "verified"
+        OmemoTrustLevel.REJECTED -> "distrusted"
+        OmemoTrustLevel.CHANGED -> "key changed"
+    }
+
 @Composable
 private fun SettingsScreen(
     viewModel: MainViewModel,
@@ -500,6 +623,7 @@ private fun SettingsScreen(
     modifier: Modifier = Modifier,
 ) {
     val hidden by viewModel.hideNotificationContent.collectAsStateWithLifecycle()
+    val omemoState by viewModel.omemoState.collectAsStateWithLifecycle()
     var showThirdPartyNotices by rememberSaveable { mutableStateOf(false) }
     LazyColumn(modifier = modifier.fillMaxSize(), contentPadding = androidx.compose.foundation.layout.PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         item {
@@ -519,9 +643,24 @@ private fun SettingsScreen(
         }
         item {
             SettingsCard("Encryption status") {
-                Text("Direct chats are not end-to-end encrypted in ${BuildConfig.VERSION_NAME}.")
+                Text(
+                    when (omemoState.status) {
+                        OmemoSessionStatus.READY -> "OMEMO is active for direct chats."
+                        OmemoSessionStatus.INITIALIZING -> "OMEMO is initializing."
+                        OmemoSessionStatus.FAILED -> "OMEMO needs attention."
+                        OmemoSessionStatus.INACTIVE -> "OMEMO is inactive while signed out or offline."
+                    },
+                )
                 Spacer(Modifier.height(6.dp))
-                Text("OMEMO is a gated Phase 0.2.0 milestone.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                omemoState.detail?.let { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                omemoState.ownFingerprint?.let { fingerprint ->
+                    Text("This device", fontWeight = FontWeight.Bold)
+                    Text(fingerprint.blocksOfEight(), style = MaterialTheme.typography.bodySmall)
+                }
+                Text(
+                    "Jarboa never falls back to plaintext for outgoing messages.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
         item {
@@ -634,3 +773,5 @@ private fun formatListTime(timestamp: Long): String = Instant.ofEpochMilli(times
 private fun formatMessageTime(timestamp: Long): String = Instant.ofEpochMilli(timestamp)
     .atZone(ZoneId.systemDefault())
     .format(messageTimeFormatter)
+
+private fun String.blocksOfEight(): String = chunked(8).joinToString(" ")

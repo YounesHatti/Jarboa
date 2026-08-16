@@ -6,6 +6,7 @@ import com.youneshatti.jarboa.data.local.JarboaDatabase
 import com.youneshatti.jarboa.data.local.MessageEntity
 import com.youneshatti.jarboa.domain.model.Conversation
 import com.youneshatti.jarboa.domain.model.DirectMessage
+import com.youneshatti.jarboa.domain.model.MessageEncryption
 import com.youneshatti.jarboa.domain.model.MessageStatus
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -31,6 +32,7 @@ class MessageRepository(private val database: JarboaDatabase) {
             timestamp = timestamp,
             outgoing = true,
             status = MessageStatus.PENDING,
+            encryption = MessageEncryption.OMEMO_UNVERIFIED,
         )
         val messageWithStanzaId = message.copy(stanzaId = message.id)
         database.withTransaction {
@@ -54,6 +56,9 @@ class MessageRepository(private val database: JarboaDatabase) {
         stanzaId: String?,
         body: String,
         timestamp: Long,
+        encryption: MessageEncryption,
+        senderDeviceId: Int?,
+        senderFingerprint: String?,
     ): Boolean {
         val message = MessageEntity(
             id = stanzaId ?: UUID.randomUUID().toString(),
@@ -64,6 +69,9 @@ class MessageRepository(private val database: JarboaDatabase) {
             timestamp = timestamp,
             outgoing = false,
             status = MessageStatus.DELIVERED,
+            encryption = encryption,
+            senderDeviceId = senderDeviceId,
+            senderFingerprint = senderFingerprint,
         )
         return database.withTransaction {
             stanzaId?.let { id ->
@@ -86,7 +94,8 @@ class MessageRepository(private val database: JarboaDatabase) {
         }
     }
 
-    suspend fun markSent(id: String) = database.messageDao().markSent(id)
+    suspend fun markSent(id: String, encryption: MessageEncryption) =
+        database.messageDao().markSent(id, encryption)
 
     suspend fun markFailed(id: String) = database.messageDao().markFailed(id)
 
@@ -115,4 +124,7 @@ private fun MessageEntity.toDomain() = DirectMessage(
     timestamp = timestamp,
     outgoing = outgoing,
     status = status,
+    encryption = encryption,
+    senderDeviceId = senderDeviceId,
+    senderFingerprint = senderFingerprint,
 )
