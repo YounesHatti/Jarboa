@@ -4,6 +4,13 @@ All notable Jarboa changes will be recorded here. The project follows semantic v
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-08-16
+
+### Fixed
+
+- Use Android's platform XML Pull Parser instead of packaging Smack's desktop XPP3 jars.
+- Exercise the optimized release build in pull-request and main-branch CI.
+
 ## [0.1.1] - 2026-08-16
 
 ### Fixed
@@ -26,6 +33,7 @@ All notable Jarboa changes will be recorded here. The project follows semantic v
 - Stable Android API 36 production baseline.
 - AndroidX Core and Lifecycle pinned to the stable-SDK-compatible release lines.
 
-[Unreleased]: https://github.com/YounesHatti/Jarboa/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/YounesHatti/Jarboa/compare/v0.1.2...HEAD
+[0.1.2]: https://github.com/YounesHatti/Jarboa/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/YounesHatti/Jarboa/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/YounesHatti/Jarboa/releases/tag/v0.1.0
