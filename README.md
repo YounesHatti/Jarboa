@@ -15,7 +15,7 @@ Jarboa is a small, privacy-focused XMPP messenger for Android and GrapheneOS. It
 - Keystore-encrypted account credentials
 - Foreground connection service and privacy-preserving notifications
 - Monochrome Chats, Contacts, and Settings navigation
-- Android 9 (API 28) and later; compile/target SDK 37
+- Android 9 (API 28) and later; compile/target SDK 36
 
 Roster contacts, OMEMO, attachments, groups, calls, and multi-account support are not part of this milestone.
 
@@ -30,7 +30,7 @@ There is no production release yet. APKs from pull-request CI are debug artifact
 Requirements:
 
 - JDK 17
-- Android SDK Platform 37
+- Android SDK Platform 36
 
 ```shell
 ./gradlew lintDebug testDebugUnitTest assembleDebug
