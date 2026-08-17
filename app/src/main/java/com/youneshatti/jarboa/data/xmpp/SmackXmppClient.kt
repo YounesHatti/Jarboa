@@ -1,6 +1,7 @@
 package com.youneshatti.jarboa.data.xmpp
 
 import com.youneshatti.jarboa.data.security.OmemoTrustStore
+import com.youneshatti.jarboa.domain.contact.contactSubscriptionState
 import com.youneshatti.jarboa.domain.model.AccountConfig
 import com.youneshatti.jarboa.domain.model.FailureReason
 import com.youneshatti.jarboa.domain.model.MessageEncryption
@@ -11,6 +12,7 @@ import com.youneshatti.jarboa.domain.model.OmemoSessionState
 import com.youneshatti.jarboa.domain.model.OmemoSessionStatus
 import com.youneshatti.jarboa.domain.model.OmemoTrustLevel
 import com.youneshatti.jarboa.domain.model.XmppConnectionState
+import com.youneshatti.jarboa.domain.model.XmppContact
 import com.youneshatti.jarboa.domain.security.OmemoSendPolicy
 import com.youneshatti.jarboa.domain.security.OmemoSendSafety
 import kotlinx.coroutines.CoroutineScope
@@ -37,6 +39,9 @@ import org.jivesoftware.smack.chat2.ChatManager
 import org.jivesoftware.smack.packet.Message
 import org.jivesoftware.smack.packet.Stanza
 import org.jivesoftware.smack.packet.StanzaBuilder
+import org.jivesoftware.smack.roster.AbstractRosterListener
+import org.jivesoftware.smack.roster.Roster
+import org.jivesoftware.smack.roster.SubscribeListener
 import org.jivesoftware.smack.sasl.SASLErrorException
 import org.jivesoftware.smack.tcp.XMPPTCPConnection
 import org.jivesoftware.smack.tcp.XMPPTCPConnectionConfiguration
@@ -54,6 +59,7 @@ import org.jivesoftware.smackx.pubsub.PubSubException
 import org.jivesoftware.smackx.receipts.DeliveryReceiptManager
 import org.jivesoftware.smackx.receipts.DeliveryReceiptRequest
 import org.jxmpp.jid.BareJid
+import org.jxmpp.jid.Jid
 import org.jxmpp.jid.impl.JidCreate
 import org.jxmpp.jid.parts.Resourcepart
 import java.io.IOException
@@ -67,14 +73,17 @@ class SmackXmppClient(
 ) : XmppClient {
     private val state = MutableStateFlow<XmppConnectionState>(XmppConnectionState.SignedOut)
     private val mutableOmemoState = MutableStateFlow(OmemoSessionState.Inactive)
+    private val mutableContacts = MutableStateFlow<List<XmppContact>>(emptyList())
     private val eventChannel = Channel<XmppEvent>(Channel.UNLIMITED)
     private val connectionMutex = Mutex()
     private val clientScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var connection: XMPPTCPConnection? = null
     private var omemoManager: OmemoManager? = null
+    private var roster: Roster? = null
 
     override val connectionState: StateFlow<XmppConnectionState> = state.asStateFlow()
     override val omemoState: StateFlow<OmemoSessionState> = mutableOmemoState.asStateFlow()
+    override val contacts: StateFlow<List<XmppContact>> = mutableContacts.asStateFlow()
     override val events: Flow<XmppEvent> = eventChannel.receiveAsFlow()
 
     override suspend fun connect(config: AccountConfig, password: CharArray) =
@@ -105,6 +114,7 @@ class SmackXmppClient(
                     val newConnection = XMPPTCPConnection(builder.build())
                     connection = newConnection
                     addConnectionListener(newConnection)
+                    val activeRoster = configureRoster(newConnection)
                     newConnection.connect()
                     if (!newConnection.isSecureConnection) {
                         throw SSLHandshakeException("The server did not establish a validated TLS session.")
@@ -114,6 +124,7 @@ class SmackXmppClient(
                     state.value = XmppConnectionState.Authenticating
                     newConnection.login()
                     ReconnectionManager.getInstanceFor(newConnection).enableAutomaticReconnection()
+                    runCatching { refreshRoster(activeRoster, reload = !activeRoster.isLoaded) }
                     state.value = XmppConnectionState.Connected(newConnection.user.asBareJid().toString())
                     manager?.let(::initializeOmemo)
                     Unit
@@ -131,6 +142,34 @@ class SmackXmppClient(
         connectionMutex.withLock {
             state.value = XmppConnectionState.SignedOut
             disconnectCurrent()
+        }
+    }
+
+    override suspend fun addContact(contactJid: String) = withContext(Dispatchers.IO) {
+        connectionMutex.withLock {
+            val activeConnection = requireConnection()
+            val contact = JidCreate.entityBareFrom(contactJid)
+            require(activeConnection.user.asBareJid() != contact) { "You cannot add your own account as a contact." }
+            val activeRoster = roster ?: configureRoster(activeConnection)
+            if (!activeRoster.isLoaded) activeRoster.reloadAndWait()
+
+            val entry = activeRoster.getEntry(contact)
+            if (entry == null) {
+                val displayName = contactJid.substringBefore('@')
+                if (activeRoster.isSubscriptionPreApprovalSupported) {
+                    activeRoster.preApproveAndCreateEntry(contact, displayName, emptyArray())
+                } else {
+                    activeRoster.createItemAndRequestSubscription(contact, displayName, emptyArray())
+                }
+            } else {
+                if (activeRoster.isSubscriptionPreApprovalSupported && !entry.canSeeMyPresence()) {
+                    activeRoster.preApprove(contact)
+                }
+                if (!entry.canSeeHisPresence() && !entry.isSubscriptionPending) {
+                    activeRoster.sendSubscriptionRequest(contact)
+                }
+            }
+            publishRosterContacts(activeRoster)
         }
     }
 
@@ -265,6 +304,56 @@ class SmackXmppClient(
         }
     }
 
+    private fun configureRoster(activeConnection: XMPPTCPConnection): Roster {
+        val activeRoster = Roster.getInstanceFor(activeConnection)
+        roster = activeRoster
+        activeRoster.subscriptionMode = Roster.SubscriptionMode.manual
+        activeRoster.addSubscribeListener { from, _ ->
+            val knownContact = roster === activeRoster && activeRoster.contains(from.asBareJid())
+            if (knownContact) {
+                SubscribeListener.SubscribeAnswer.ApproveAndAlsoRequestIfRequired
+            } else {
+                SubscribeListener.SubscribeAnswer.Deny
+            }
+        }
+        activeRoster.addRosterListener(object : AbstractRosterListener() {
+            override fun entriesAdded(addresses: Collection<Jid>) = scheduleRosterPublish(activeRoster)
+
+            override fun entriesUpdated(addresses: Collection<Jid>) = scheduleRosterPublish(activeRoster)
+
+            override fun entriesDeleted(addresses: Collection<Jid>) = scheduleRosterPublish(activeRoster)
+        })
+        return activeRoster
+    }
+
+    private fun scheduleRosterPublish(activeRoster: Roster) {
+        clientScope.launch { publishRosterContacts(activeRoster) }
+    }
+
+    private fun refreshRoster(activeRoster: Roster, reload: Boolean) {
+        if (reload) activeRoster.reloadAndWait()
+        publishRosterContacts(activeRoster)
+    }
+
+    private fun publishRosterContacts(activeRoster: Roster) {
+        if (roster !== activeRoster) return
+        mutableContacts.value = activeRoster.entries
+            .map { entry ->
+                val jid = entry.jid.toString()
+                XmppContact(
+                    jid = jid,
+                    displayName = entry.name?.trim()?.takeIf(String::isNotEmpty)
+                        ?: jid.substringBefore('@'),
+                    subscriptionState = contactSubscriptionState(
+                        canSeeContactPresence = entry.canSeeHisPresence(),
+                        contactCanSeeMyPresence = entry.canSeeMyPresence(),
+                        requestPending = entry.isSubscriptionPending,
+                    ),
+                )
+            }
+            .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.displayName })
+    }
+
     private val omemoMessageListener = object : OmemoMessageListener {
         override fun onOmemoMessageReceived(stanza: Stanza, decryptedMessage: OmemoMessage.Received) {
             val body = decryptedMessage.body?.takeIf(String::isNotBlank) ?: return
@@ -313,6 +402,15 @@ class SmackXmppClient(
                     previousState is XmppConnectionState.Disconnected ||
                     previousState is XmppConnectionState.Failed
                 ) {
+                    roster?.let { activeRoster ->
+                        clientScope.launch {
+                            connectionMutex.withLock {
+                                if (connection === activeConnection && activeConnection.isAuthenticated) {
+                                    runCatching { refreshRoster(activeRoster, reload = !activeRoster.isLoaded) }
+                                }
+                            }
+                        }
+                    }
                     retryOmemoAfterReconnect(activeConnection)
                 }
             }
@@ -432,6 +530,8 @@ class SmackXmppClient(
         val currentOmemoManager = omemoManager
         connection = null
         omemoManager = null
+        roster = null
+        mutableContacts.value = emptyList()
         if (resetOmemoState) mutableOmemoState.value = OmemoSessionState.Inactive
         runCatching { currentOmemoManager?.stopStanzaAndPEPListeners() }
         if (current?.isConnected == true) runCatching { current.disconnect() }

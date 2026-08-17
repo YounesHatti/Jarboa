@@ -4,6 +4,15 @@ All notable Jarboa changes will be recorded here. The project follows semantic v
 
 ## [Unreleased]
 
+### Added
+
+- Synchronize the account's XMPP roster in the Contacts tab.
+- Add a contact and request a mutual presence subscription whenever a direct chat is opened.
+
+### Security
+
+- Approve reciprocal presence requests only for contacts the user already added; continue rejecting unknown requests.
+
 ### Fixed
 
 - Initialize Smack's required Android networking support before the first XMPP connection.

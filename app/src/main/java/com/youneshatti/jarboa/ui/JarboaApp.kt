@@ -70,6 +70,7 @@ import com.youneshatti.jarboa.BuildConfig
 import com.youneshatti.jarboa.MainViewModel
 import com.youneshatti.jarboa.R
 import com.youneshatti.jarboa.domain.model.Conversation
+import com.youneshatti.jarboa.domain.model.ContactSubscriptionState
 import com.youneshatti.jarboa.domain.model.DirectMessage
 import com.youneshatti.jarboa.domain.model.MessageEncryption
 import com.youneshatti.jarboa.domain.model.MessageStatus
@@ -79,6 +80,7 @@ import com.youneshatti.jarboa.domain.model.OmemoDeviceInfo
 import com.youneshatti.jarboa.domain.model.OmemoSessionStatus
 import com.youneshatti.jarboa.domain.model.OmemoTrustLevel
 import com.youneshatti.jarboa.domain.model.XmppConnectionState
+import com.youneshatti.jarboa.domain.model.XmppContact
 import com.youneshatti.jarboa.domain.validation.JidValidationResult
 import com.youneshatti.jarboa.domain.validation.XmppAddressValidator
 import java.time.Instant
@@ -235,6 +237,7 @@ private fun HomeScreen(viewModel: MainViewModel, busy: Boolean) {
     val selectedConversation by viewModel.selectedConversation.collectAsStateWithLifecycle()
     val connectionState by viewModel.connectionState.collectAsStateWithLifecycle()
     val conversations by viewModel.conversations.collectAsStateWithLifecycle()
+    val contacts by viewModel.contacts.collectAsStateWithLifecycle()
 
     if (selectedConversation != null) {
         ConversationScreen(
@@ -270,7 +273,7 @@ private fun HomeScreen(viewModel: MainViewModel, busy: Boolean) {
             }
         },
         floatingActionButton = {
-            if (tab == HomeTab.CHATS) {
+            if (tab == HomeTab.CHATS || tab == HomeTab.CONTACTS) {
                 FloatingActionButton(onClick = { showNewChat = true }) { Text("+", style = MaterialTheme.typography.headlineSmall) }
             }
         },
@@ -283,9 +286,10 @@ private fun HomeScreen(viewModel: MainViewModel, busy: Boolean) {
                 onNewChat = { showNewChat = true },
                 modifier = Modifier.padding(padding),
             )
-            HomeTab.CONTACTS -> PhasePlaceholder(
-                title = "Contacts are next",
-                detail = "Roster sync and presence are planned for Phase 0.3.0. You can start a direct chat now from the Chats tab.",
+            HomeTab.CONTACTS -> ContactsScreen(
+                contacts = contacts,
+                onContact = viewModel::openConversation,
+                onAddContact = { showNewChat = true },
                 modifier = Modifier.padding(padding),
             )
             HomeTab.SETTINGS -> SettingsScreen(
@@ -376,6 +380,71 @@ private fun ChatsScreen(
         }
     }
 }
+
+@Composable
+private fun ContactsScreen(
+    contacts: List<XmppContact>,
+    onContact: (String) -> Unit,
+    onAddContact: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    if (contacts.isEmpty()) {
+        PhasePlaceholder(
+            title = "No contacts yet",
+            detail = "Add a full XMPP address. Jarboa will request a mutual contact subscription for better OMEMO interoperability.",
+            actionLabel = "Add contact",
+            onAction = onAddContact,
+            modifier = modifier,
+        )
+        return
+    }
+    LazyColumn(modifier = modifier.fillMaxSize()) {
+        items(contacts, key = XmppContact::jid) { contact ->
+            Row(
+                modifier = Modifier.fillMaxWidth().clickable { onContact(contact.jid) }.padding(18.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(
+                    modifier = Modifier.size(44.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceVariant),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(contact.displayName.take(1).uppercase(), fontWeight = FontWeight.Black)
+                }
+                Spacer(Modifier.width(14.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(contact.displayName, fontWeight = FontWeight.Bold, maxLines = 1)
+                    Text(
+                        contact.jid,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Text(
+                        contact.subscriptionState.label,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = contact.subscriptionState.color,
+                    )
+                }
+            }
+            HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
+        }
+    }
+}
+
+private val ContactSubscriptionState.label: String
+    get() = when (this) {
+        ContactSubscriptionState.MUTUAL -> "Mutual contact"
+        ContactSubscriptionState.REQUEST_SENT -> "Contact request sent"
+        ContactSubscriptionState.ONE_WAY -> "One-way contact · waiting for mutual approval"
+        ContactSubscriptionState.ADDED -> "Added · waiting for approval"
+    }
+
+private val ContactSubscriptionState.color: Color
+    @Composable get() = if (this == ContactSubscriptionState.MUTUAL) {
+        Color(0xFFB9F6CA)
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant
+    }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -741,7 +810,7 @@ private fun NewChatDialog(onDismiss: () -> Unit, onOpen: (String) -> Unit) {
     }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("New direct chat") },
+        title = { Text("Add contact") },
         text = {
             OutlinedTextField(
                 value = jid,
@@ -758,7 +827,7 @@ private fun NewChatDialog(onDismiss: () -> Unit, onOpen: (String) -> Unit) {
                 keyboardActions = KeyboardActions(onDone = { submit() }),
             )
         },
-        confirmButton = { TextButton(onClick = { submit() }) { Text("Open") } },
+        confirmButton = { TextButton(onClick = { submit() }) { Text("Add & open") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )
 }

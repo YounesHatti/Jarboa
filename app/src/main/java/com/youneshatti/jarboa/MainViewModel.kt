@@ -13,6 +13,7 @@ import com.youneshatti.jarboa.domain.model.OmemoContactStatus
 import com.youneshatti.jarboa.domain.model.OmemoSessionState
 import com.youneshatti.jarboa.domain.model.OmemoTrustLevel
 import com.youneshatti.jarboa.domain.model.XmppConnectionState
+import com.youneshatti.jarboa.domain.model.XmppContact
 import com.youneshatti.jarboa.domain.validation.JidValidationResult
 import com.youneshatti.jarboa.domain.validation.XmppAddressValidator
 import com.youneshatti.jarboa.service.XmppConnectionService
@@ -44,6 +45,7 @@ class MainViewModel(
     val hideNotificationContent: StateFlow<Boolean> = mutableNotificationPrivacy.asStateFlow()
     val connectionState: StateFlow<XmppConnectionState> = container.xmppClient.connectionState
     val omemoState: StateFlow<OmemoSessionState> = container.xmppClient.omemoState
+    val contacts: StateFlow<List<XmppContact>> = container.xmppClient.contacts
     val conversations: StateFlow<List<Conversation>> = container.messageRepository.conversations.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5_000),
@@ -54,7 +56,7 @@ class MainViewModel(
         viewModelScope.launch {
             connectionState.collect { state ->
                 if (state is XmppConnectionState.Connected) {
-                    mutableSelectedConversation.value?.let(::refreshContactSecurity)
+                    mutableSelectedConversation.value?.let(::prepareConversationContact)
                 }
             }
         }
@@ -114,7 +116,7 @@ class MainViewModel(
         }
         mutableSelectedConversation.value = normalized
         viewModelScope.launch { container.messageRepository.markConversationRead(normalized) }
-        refreshContactSecurity(normalized)
+        prepareConversationContact(normalized)
     }
 
     fun closeConversation() {
@@ -125,6 +127,28 @@ class MainViewModel(
     fun refreshContactSecurity(jid: String) {
         mutableContactSecurity.value = OmemoContactSecurity.checking(jid)
         viewModelScope.launch {
+            val security = runCatching { container.xmppClient.loadContactSecurity(jid) }
+                .getOrElse { failure ->
+                    OmemoContactSecurity(
+                        jid = jid,
+                        status = OmemoContactStatus.UNAVAILABLE,
+                        detail = failure.message ?: "OMEMO device information could not be loaded.",
+                    )
+                }
+            if (mutableSelectedConversation.value == jid) mutableContactSecurity.value = security
+        }
+    }
+
+    private fun prepareConversationContact(jid: String) {
+        mutableContactSecurity.value = OmemoContactSecurity.checking(jid)
+        viewModelScope.launch {
+            runCatching { container.xmppClient.addContact(jid) }
+                .onFailure {
+                    if (mutableSelectedConversation.value == jid) {
+                        mutableError.value =
+                            "Jarboa could not add this address to Contacts. Encryption discovery may remain unavailable."
+                    }
+                }
             val security = runCatching { container.xmppClient.loadContactSecurity(jid) }
                 .getOrElse { failure ->
                     OmemoContactSecurity(

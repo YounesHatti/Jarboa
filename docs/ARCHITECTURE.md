@@ -11,6 +11,10 @@ Jarboa is a single-activity, single-account Android application. Dependencies ar
 5. `AppContainer` is the sole event consumer. It writes events through `MessageRepository` to Room and then creates a privacy-filtered notification.
 6. `MainViewModel` exposes connection and database flows to Compose. Outgoing messages are written as pending, sent over XMPP, and then advanced to sent, delivered, or failed.
 
+## Contacts
+
+Smack's server-backed roster is the source of truth for the Contacts tab. Opening a direct chat adds the bare JID to that roster and requests a presence subscription. Jarboa uses manual subscription handling: it approves and reciprocates requests only when the sender is already in the user's roster, and rejects unknown subscription requests. This compatibility path helps servers and clients that restrict OMEMO PEP discovery to roster contacts without making plaintext fallback possible.
+
 ## Storage
 
 - Account address, host, and port: private SharedPreferences.
