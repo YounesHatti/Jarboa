@@ -97,8 +97,8 @@ class MainViewModel(
             result.onSuccess {
                 mutableSignedIn.value = true
                 XmppConnectionService.start(getApplication())
-            }.onFailure { failure ->
-                mutableError.value = failure.message ?: "Jarboa could not sign in. Check the account and server."
+            }.onFailure {
+                mutableError.value = signInFailureMessage(connectionState.value)
             }
             mutableBusy.value = false
         }
@@ -192,3 +192,7 @@ class MainViewModel(
         }
     }
 }
+
+internal fun signInFailureMessage(connectionState: XmppConnectionState): String =
+    (connectionState as? XmppConnectionState.Failed)?.detail
+        ?: "Jarboa could not sign in. Check the account and server."

@@ -13,13 +13,16 @@ import com.youneshatti.jarboa.domain.model.OmemoTrustLevel
 import com.youneshatti.jarboa.domain.model.XmppConnectionState
 import com.youneshatti.jarboa.domain.security.OmemoSendPolicy
 import com.youneshatti.jarboa.domain.security.OmemoSendSafety
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -42,12 +45,15 @@ import org.jivesoftware.smackx.carbons.packet.CarbonExtension
 import org.jivesoftware.smackx.omemo.OmemoManager
 import org.jivesoftware.smackx.omemo.OmemoMessage
 import org.jivesoftware.smackx.omemo.element.OmemoElement
+import org.jivesoftware.smackx.omemo.exceptions.CorruptedOmemoKeyException
 import org.jivesoftware.smackx.omemo.listener.OmemoMessageListener
+import org.jivesoftware.smackx.pubsub.PubSubException
 import org.jivesoftware.smackx.receipts.DeliveryReceiptManager
 import org.jivesoftware.smackx.receipts.DeliveryReceiptRequest
 import org.jxmpp.jid.BareJid
 import org.jxmpp.jid.impl.JidCreate
 import org.jxmpp.jid.parts.Resourcepart
+import java.io.IOException
 import java.net.UnknownHostException
 import java.security.cert.CertificateException
 import javax.net.ssl.HttpsURLConnection
@@ -60,6 +66,7 @@ class SmackXmppClient(
     private val mutableOmemoState = MutableStateFlow(OmemoSessionState.Inactive)
     private val eventChannel = Channel<XmppEvent>(Channel.UNLIMITED)
     private val connectionMutex = Mutex()
+    private val clientScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var connection: XMPPTCPConnection? = null
     private var omemoManager: OmemoManager? = null
 
@@ -100,28 +107,14 @@ class SmackXmppClient(
                         throw SSLHandshakeException("The server did not establish a validated TLS session.")
                     }
                     configureMessaging(newConnection)
+                    val manager = prepareOmemoManager(newConnection)
                     state.value = XmppConnectionState.Authenticating
                     newConnection.login()
-
-                    mutableOmemoState.value = OmemoSessionState.Initializing
-                    val manager = OmemoManager.getInstanceFor(newConnection)
-                    manager.setTrustCallback(trustStore)
-                    manager.addOmemoMessageListener(omemoMessageListener)
-                    manager.initialize()
-                    omemoManager = manager
-                    val ownFingerprint = manager.ownFingerprint.toString()
-                    mutableOmemoState.value = OmemoSessionState(
-                        status = OmemoSessionStatus.READY,
-                        ownFingerprint = ownFingerprint,
-                    )
-
                     ReconnectionManager.getInstanceFor(newConnection).enableAutomaticReconnection()
                     state.value = XmppConnectionState.Connected(newConnection.user.asBareJid().toString())
+                    manager?.let(::initializeOmemo)
+                    Unit
                 } catch (error: Throwable) {
-                    mutableOmemoState.value = OmemoSessionState(
-                        status = OmemoSessionStatus.FAILED,
-                        detail = error.safeOmemoDetail(),
-                    )
                     disconnectCurrent(resetOmemoState = false)
                     state.value = error.toFailureState()
                     throw error
@@ -145,7 +138,7 @@ class SmackXmppClient(
     ): OmemoSendResult = withContext(Dispatchers.IO) {
         connectionMutex.withLock {
             val activeConnection = requireConnection()
-            val manager = requireOmemoManager()
+            val manager = requireReadyOmemoManager()
             val recipient = JidCreate.entityBareFrom(recipientJid)
             val security = loadContactSecurity(manager, recipient, refresh = true)
             check(security.canSend) { security.blockingMessage() }
@@ -189,7 +182,7 @@ class SmackXmppClient(
             connectionMutex.withLock {
                 requireConnection()
                 loadContactSecurity(
-                    manager = requireOmemoManager(),
+                    manager = requireReadyOmemoManager(),
                     recipient = JidCreate.entityBareFrom(recipientJid),
                     refresh = true,
                 )
@@ -207,7 +200,7 @@ class SmackXmppClient(
             requireConnection()
             trustStore.decide(recipientJid, deviceId, fingerprint, trust)
             loadContactSecurity(
-                manager = requireOmemoManager(),
+                manager = requireReadyOmemoManager(),
                 recipient = JidCreate.entityBareFrom(recipientJid),
                 refresh = false,
             )
@@ -309,9 +302,16 @@ class SmackXmppClient(
     private fun addConnectionListener(activeConnection: XMPPTCPConnection) {
         activeConnection.addConnectionListener(object : AbstractConnectionListener() {
             override fun authenticated(connection: XMPPConnection, resumed: Boolean) {
-                if (mutableOmemoState.value.status != OmemoSessionStatus.READY) return
+                val previousState = state.value
                 val bound = connection.user?.asBareJid()?.toString() ?: return
                 state.value = XmppConnectionState.Connected(bound)
+                if (
+                    previousState is XmppConnectionState.Reconnecting ||
+                    previousState is XmppConnectionState.Disconnected ||
+                    previousState is XmppConnectionState.Failed
+                ) {
+                    retryOmemoAfterReconnect(activeConnection)
+                }
             }
 
             override fun connectionClosed() {
@@ -321,6 +321,10 @@ class SmackXmppClient(
             }
 
             override fun connectionClosedOnError(error: Exception) {
+                mutableOmemoState.value = OmemoSessionState(
+                    status = OmemoSessionStatus.FAILED,
+                    detail = "Encryption is paused until Jarboa reconnects.",
+                )
                 state.value = error.toFailureState()
             }
         })
@@ -341,9 +345,61 @@ class SmackXmppClient(
         ?.takeIf { it.isConnected && it.isAuthenticated }
         ?: error("The XMPP connection is offline.")
 
-    private fun requireOmemoManager(): OmemoManager = omemoManager
-        ?.takeIf { mutableOmemoState.value.status == OmemoSessionStatus.READY }
-        ?: error("OMEMO is not ready. Nothing was sent.")
+    private fun prepareOmemoManager(activeConnection: XMPPTCPConnection): OmemoManager? = try {
+        OmemoManager.getInstanceFor(activeConnection).also { manager ->
+            manager.setTrustCallback(trustStore)
+            manager.addOmemoMessageListener(omemoMessageListener)
+            omemoManager = manager
+        }
+    } catch (error: Throwable) {
+        mutableOmemoState.value = OmemoSessionState(
+            status = OmemoSessionStatus.FAILED,
+            detail = userFacingOmemoFailure(error),
+        )
+        null
+    }
+
+    private fun initializeOmemo(manager: OmemoManager): Boolean {
+        if (manager !== omemoManager || connection?.isAuthenticated != true) return false
+        mutableOmemoState.value = OmemoSessionState.Initializing
+        return try {
+            manager.initialize()
+            val ownFingerprint = manager.ownFingerprint?.toString()
+                ?: error("OMEMO did not create a local identity.")
+            mutableOmemoState.value = OmemoSessionState(
+                status = OmemoSessionStatus.READY,
+                ownFingerprint = ownFingerprint,
+            )
+            true
+        } catch (error: Throwable) {
+            mutableOmemoState.value = OmemoSessionState(
+                status = OmemoSessionStatus.FAILED,
+                detail = userFacingOmemoFailure(error),
+            )
+            false
+        }
+    }
+
+    private fun requireReadyOmemoManager(): OmemoManager {
+        val activeConnection = requireConnection()
+        val manager = omemoManager ?: prepareOmemoManager(activeConnection) ?: error(
+            mutableOmemoState.value.detail ?: "OMEMO is unavailable. Nothing was sent.",
+        )
+        if (mutableOmemoState.value.status != OmemoSessionStatus.READY && !initializeOmemo(manager)) {
+            error(mutableOmemoState.value.detail ?: "OMEMO is unavailable. Nothing was sent.")
+        }
+        return manager
+    }
+
+    private fun retryOmemoAfterReconnect(activeConnection: XMPPTCPConnection) {
+        clientScope.launch {
+            connectionMutex.withLock {
+                if (connection !== activeConnection || !activeConnection.isAuthenticated) return@withLock
+                val manager = omemoManager ?: prepareOmemoManager(activeConnection)
+                manager?.let(::initializeOmemo)
+            }
+        }
+    }
 
     private fun OmemoContactSecurity.blockingMessage(): String = when {
         hasChangedIdentity -> "A contact device identity changed. Verify it before sending."
@@ -354,9 +410,11 @@ class SmackXmppClient(
 
     private fun disconnectCurrent(resetOmemoState: Boolean = true) {
         val current = connection
+        val currentOmemoManager = omemoManager
         connection = null
         omemoManager = null
         if (resetOmemoState) mutableOmemoState.value = OmemoSessionState.Inactive
+        runCatching { currentOmemoManager?.stopStanzaAndPEPListeners() }
         if (current?.isConnected == true) runCatching { current.disconnect() }
     }
 
@@ -382,12 +440,7 @@ class SmackXmppClient(
         return XmppConnectionState.Failed(reason = reason, detail = safeDetail(root))
     }
 
-    private fun Throwable.safeOmemoDetail(): String = when (this) {
-        is SmackException.NoResponseException -> "The server did not respond while checking OMEMO devices."
-        is SmackException.NotConnectedException -> "The XMPP connection went offline while checking OMEMO."
-        is XMPPException.XMPPErrorException -> "The server does not currently provide the OMEMO data Jarboa needs."
-        else -> message?.take(180) ?: "OMEMO could not be initialized safely."
-    }
+    private fun Throwable.safeOmemoDetail(): String = userFacingOmemoFailure(this)
 
     private fun safeDetail(error: Throwable): String? = when (error) {
         is SASLErrorException -> "The server rejected the account credentials."
@@ -402,11 +455,41 @@ class SmackXmppClient(
         is SmackException.NotConnectedException -> "The XMPP connection is offline."
         is XMPPException.XMPPErrorException -> "The XMPP server rejected the request."
         is IllegalArgumentException -> "The account or server setting is invalid."
-        is IllegalStateException -> error.message?.take(180)
+        is IllegalStateException -> "Jarboa could not finish setting up the XMPP session."
         else -> null
     }
 
     private companion object {
         const val CONNECT_TIMEOUT_MILLIS = 30_000
+    }
+}
+
+internal fun userFacingOmemoFailure(error: Throwable): String {
+    val causes = generateSequence(error) { it.cause }.toList()
+    val recognized = causes.firstOrNull { cause ->
+        cause is CorruptedOmemoKeyException ||
+            cause is SmackException.NoResponseException ||
+            cause is SmackException.NotConnectedException ||
+            cause is SmackException.NotLoggedInException ||
+            cause is XMPPException.XMPPErrorException ||
+            cause is PubSubException.NotALeafNodeException ||
+            cause is IOException
+    } ?: causes.last()
+    return when (recognized) {
+        is CorruptedOmemoKeyException ->
+            "Jarboa could not read its local encryption keys. Sign out once, then sign in again."
+        is SmackException.NoResponseException ->
+            "The server did not respond while Jarboa was setting up encryption. Jarboa will retry."
+        is SmackException.NotConnectedException,
+        is SmackException.NotLoggedInException,
+        -> "The XMPP connection changed while Jarboa was setting up encryption. Jarboa will retry."
+        is XMPPException.XMPPErrorException ->
+            "The server rejected Jarboa's OMEMO setup. The account stays connected, but sending is blocked."
+        is PubSubException.NotALeafNodeException ->
+            "The server's OMEMO storage is incompatible with this Jarboa build. Sending is blocked."
+        is IOException ->
+            "Jarboa could not read or write its local encryption keys. Sending is blocked."
+        else ->
+            "OMEMO setup failed. The account stays connected, but sending is blocked until Jarboa can retry."
     }
 }
