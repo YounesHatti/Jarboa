@@ -19,6 +19,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.jivesoftware.smack.android.AndroidSmackInitializer
 import java.io.File
 
 class JarboaApplication : Application() {
@@ -27,6 +28,7 @@ class JarboaApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        AndroidSmackInitializer.initialize(this)
         container = AppContainer(this)
     }
 }
@@ -131,6 +133,7 @@ class AppContainer(application: Application) {
         check(omemoDirectory.mkdirs() || omemoDirectory.isDirectory) {
             "Jarboa could not recreate its private OMEMO key directory."
         }
+        OmemoBootstrap.resetStorage(omemoDirectory)
         notifier.cancelAll()
     }
 }

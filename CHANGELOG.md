@@ -4,6 +4,13 @@ All notable Jarboa changes will be recorded here. The project follows semantic v
 
 ## [Unreleased]
 
+### Fixed
+
+- Initialize Smack's required Android networking support before the first XMPP connection.
+- Keep an authenticated XMPP session connected when OMEMO setup has a recoverable failure, while continuing to block all plaintext sending.
+- Retry OMEMO after reconnection or when an encrypted action is requested.
+- Replace obfuscated internal exception text in sign-in errors with safe, useful messages.
+
 ## [0.2.0-beta.1] - 2026-08-17
 
 ### Added

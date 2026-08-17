@@ -201,7 +201,7 @@ private fun SignInScreen(
             }
             Spacer(Modifier.height(16.dp))
             Text(
-                "TLS certificate validation and OMEMO initialization are required before Jarboa connects.",
+                "TLS certificate validation is required. Sending stays blocked until OMEMO is ready.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
