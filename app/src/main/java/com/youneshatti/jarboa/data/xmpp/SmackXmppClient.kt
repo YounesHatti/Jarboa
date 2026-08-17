@@ -113,6 +113,7 @@ class SmackXmppClient(
                     ReconnectionManager.getInstanceFor(newConnection).enableAutomaticReconnection()
                     state.value = XmppConnectionState.Connected(newConnection.user.asBareJid().toString())
                     manager?.let(::initializeOmemo)
+                    Unit
                 } catch (error: Throwable) {
                     disconnectCurrent(resetOmemoState = false)
                     state.value = error.toFailureState()
