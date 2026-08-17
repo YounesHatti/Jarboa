@@ -30,7 +30,7 @@ No analytics, crash-reporting, advertising, Google Play services, or proprietary
 
 ## OMEMO beta
 
-Jarboa uses Smack's Signal-backed legacy OMEMO namespace for interoperability with Conversations-family clients. New direct-message bodies are encrypted to the contact's active devices and the sender's other known devices. Sending fails closed when there are no compatible recipient devices, a fingerprint changed, or an accepted device could not be encrypted. Incoming plaintext is stored only with an explicit unencrypted label.
+Jarboa uses Smack's Signal-backed legacy OMEMO namespace for interoperability with Conversations-family clients. Its device-list and per-device bundle PEP nodes are configured with open read access, as required for encrypted sessions to begin before contacts have presence subscriptions. New direct-message bodies are encrypted to the contact's active devices and the sender's other known devices. Sending fails closed when there are no compatible recipient devices, a fingerprint changed, or an accepted device could not be encrypted. Incoming plaintext is stored only with an explicit unencrypted label.
 
 First-seen keys are trusted-on-first-use but remain visibly unverified. A fingerprint change for the same device ID becomes undecided and blocks sending until the user verifies or rejects it. Signed prekeys rotate automatically. Private OMEMO material is excluded from backup and erased on sign-out.
 

@@ -10,6 +10,8 @@ All notable Jarboa changes will be recorded here. The project follows semantic v
 - Keep an authenticated XMPP session connected when OMEMO setup has a recoverable failure, while continuing to block all plaintext sending.
 - Retry OMEMO after reconnection or when an encrypted action is requested.
 - Replace obfuscated internal exception text in sign-in errors with safe, useful messages.
+- Publish OMEMO device-list and bundle nodes with open read access so clients can establish encrypted sessions before a roster subscription exists.
+- Use the supplied monochrome jerboa artwork for foreground-service and message notification icons.
 
 ## [0.2.0-beta.1] - 2026-08-17
 
