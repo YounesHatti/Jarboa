@@ -47,6 +47,9 @@ import org.jivesoftware.smackx.omemo.OmemoMessage
 import org.jivesoftware.smackx.omemo.element.OmemoElement
 import org.jivesoftware.smackx.omemo.exceptions.CorruptedOmemoKeyException
 import org.jivesoftware.smackx.omemo.listener.OmemoMessageListener
+import org.jivesoftware.smackx.omemo.util.OmemoConstants
+import org.jivesoftware.smackx.pep.PepManager
+import org.jivesoftware.smackx.pubsub.AccessModel
 import org.jivesoftware.smackx.pubsub.PubSubException
 import org.jivesoftware.smackx.receipts.DeliveryReceiptManager
 import org.jivesoftware.smackx.receipts.DeliveryReceiptRequest
@@ -364,6 +367,7 @@ class SmackXmppClient(
         mutableOmemoState.value = OmemoSessionState.Initializing
         return try {
             manager.initialize()
+            configurePublicOmemoNodes(manager)
             val ownFingerprint = manager.ownFingerprint?.toString()
                 ?: error("OMEMO did not create a local identity.")
             mutableOmemoState.value = OmemoSessionState(
@@ -377,6 +381,21 @@ class SmackXmppClient(
                 detail = userFacingOmemoFailure(error),
             )
             false
+        }
+    }
+
+    private fun configurePublicOmemoNodes(manager: OmemoManager) {
+        val activeConnection = requireConnection()
+        val deviceId = manager.deviceId ?: error("OMEMO did not create a device ID.")
+        val pubSubManager = PepManager.getInstanceFor(activeConnection).pepPubSubManager
+        omemoPepNodeIds(deviceId).forEach { nodeId ->
+            val node = pubSubManager.getLeafNode(nodeId)
+            val configuration = node.nodeConfiguration
+            if (configuration.accessModel != AccessModel.open) {
+                val update = configuration.fillableForm
+                update.setAccessModel(AccessModel.open)
+                node.sendConfigurationForm(update)
+            }
         }
     }
 
@@ -493,3 +512,8 @@ internal fun userFacingOmemoFailure(error: Throwable): String {
             "OMEMO setup failed. The account stays connected, but sending is blocked until Jarboa can retry."
     }
 }
+
+internal fun omemoPepNodeIds(deviceId: Int): List<String> = listOf(
+    OmemoConstants.PEP_NODE_DEVICE_LIST,
+    OmemoConstants.PEP_NODE_BUNDLE_FROM_DEVICE_ID(deviceId),
+)
