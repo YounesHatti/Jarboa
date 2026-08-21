@@ -20,6 +20,7 @@ import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.jivesoftware.smack.android.AndroidSmackInitializer
+import org.jxmpp.jid.impl.JidCreate
 import java.io.File
 
 class JarboaApplication : Application() {
@@ -123,7 +124,9 @@ class AppContainer(application: Application) {
     }
 
     suspend fun signOut() = withContext(Dispatchers.IO) {
+        val account = accountStore.loadConfig()
         xmppClient.disconnect()
+        account?.let { OmemoBootstrap.purgeLocalDevices(JidCreate.entityBareFrom(it.jid)) }
         accountStore.clear()
         database.clearAllTables()
         omemoTrustStore.clear()
@@ -133,7 +136,6 @@ class AppContainer(application: Application) {
         check(omemoDirectory.mkdirs() || omemoDirectory.isDirectory) {
             "Jarboa could not recreate its private OMEMO key directory."
         }
-        OmemoBootstrap.resetStorage(omemoDirectory)
         notifier.cancelAll()
     }
 }

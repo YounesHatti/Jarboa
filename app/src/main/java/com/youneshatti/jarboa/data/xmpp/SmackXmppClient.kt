@@ -463,38 +463,53 @@ class SmackXmppClient(
     private fun initializeOmemo(manager: OmemoManager): Boolean {
         if (manager !== omemoManager || connection?.isAuthenticated != true) return false
         mutableOmemoState.value = OmemoSessionState.Initializing
-        return try {
+        val ownFingerprint = try {
             manager.initialize()
-            configurePublicOmemoNodes(manager)
-            val ownFingerprint = manager.ownFingerprint?.toString()
+            manager.ownFingerprint?.toString()
                 ?: error("OMEMO did not create a local identity.")
-            mutableOmemoState.value = OmemoSessionState(
-                status = OmemoSessionStatus.READY,
-                ownFingerprint = ownFingerprint,
-            )
-            true
         } catch (error: Throwable) {
             mutableOmemoState.value = OmemoSessionState(
                 status = OmemoSessionStatus.FAILED,
                 detail = userFacingOmemoFailure(error),
             )
-            false
+            return false
         }
+
+        val accessWarning = runCatching { ensurePublicOmemoNodes(manager) }
+            .exceptionOrNull()
+            ?.let(::userFacingOmemoNodeAccessWarning)
+        mutableOmemoState.value = OmemoSessionState(
+            status = OmemoSessionStatus.READY,
+            ownFingerprint = ownFingerprint,
+            detail = accessWarning,
+        )
+        return true
     }
 
-    private fun configurePublicOmemoNodes(manager: OmemoManager) {
+    /**
+     * Legacy Smack publishes first and relies on the server's default PEP access model. XEP-0384
+     * requires these public key-discovery nodes to be open, so verify and normalize them without
+     * turning an otherwise initialized cryptographic session into a global failure.
+     */
+    private fun ensurePublicOmemoNodes(manager: OmemoManager) {
         val activeConnection = requireConnection()
         val deviceId = manager.deviceId ?: error("OMEMO did not create a device ID.")
         val pubSubManager = PepManager.getInstanceFor(activeConnection).pepPubSubManager
+        var firstFailure: Throwable? = null
         omemoPepNodeIds(deviceId).forEach { nodeId ->
-            val node = pubSubManager.getLeafNode(nodeId)
-            val configuration = node.nodeConfiguration
-            if (configuration.accessModel != AccessModel.open) {
-                val update = configuration.fillableForm
-                update.setAccessModel(AccessModel.open)
-                node.sendConfigurationForm(update)
+            try {
+                val node = pubSubManager.getLeafNode(nodeId)
+                val configuration = node.nodeConfiguration
+                if (configuration.accessModel != AccessModel.open) {
+                    val update = configuration.fillableForm
+                    update.setAccessModel(AccessModel.open)
+                    node.sendConfigurationForm(update)
+                }
+            } catch (error: Throwable) {
+                if (firstFailure == null) firstFailure = error
             }
         }
+        firstFailure?.let { throw it }
     }
 
     private fun requireReadyOmemoManager(): OmemoManager {
@@ -610,6 +625,16 @@ internal fun userFacingOmemoFailure(error: Throwable): String {
             "Jarboa could not read or write its local encryption keys. Sending is blocked."
         else ->
             "OMEMO setup failed. The account stays connected, but sending is blocked until Jarboa can retry."
+    }
+}
+
+internal fun userFacingOmemoNodeAccessWarning(error: Throwable): String {
+    val causes = generateSequence(error) { it.cause }.toList()
+    return if (causes.any { it is SmackException.NotConnectedException }) {
+        "OMEMO is active. Jarboa will verify public device discovery after reconnecting."
+    } else {
+        "OMEMO is active. Jarboa could not confirm public device discovery on this server; " +
+            "encrypted chats may require both people to add each other as contacts."
     }
 }
 
