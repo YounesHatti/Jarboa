@@ -29,4 +29,16 @@ class OmemoFailureMessageTest {
             message,
         )
     }
+
+    @Test
+    fun `node access warning does not expose server errors`() {
+        val message = userFacingOmemoNodeAccessWarning(IllegalStateException("private server detail"))
+
+        assertFalse(message.contains("private server detail"))
+        assertEquals(
+            "OMEMO is active. Jarboa could not confirm public device discovery on this server; " +
+                "encrypted chats may require both people to add each other as contacts.",
+            message,
+        )
+    }
 }
