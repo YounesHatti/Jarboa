@@ -10,6 +10,7 @@ import com.youneshatti.jarboa.data.xmpp.OmemoBootstrap
 import com.youneshatti.jarboa.data.xmpp.SmackXmppClient
 import com.youneshatti.jarboa.data.xmpp.XmppEvent
 import com.youneshatti.jarboa.domain.model.AccountConfig
+import com.youneshatti.jarboa.domain.model.OmemoSessionStatus
 import com.youneshatti.jarboa.domain.model.XmppConnectionState
 import com.youneshatti.jarboa.notifications.JarboaNotifier
 import com.youneshatti.jarboa.settings.SettingsStore
@@ -100,6 +101,20 @@ class AppContainer(application: Application) {
         return try {
             xmppClient.connect(stored.config, stored.password)
             true
+        } finally {
+            stored.password.fill('\u0000')
+        }
+    }
+
+    /**
+     * Creates a fresh authenticated XMPP connection and OMEMO manager without deleting the
+     * account, message history, trust decisions, or local encryption keys.
+     */
+    suspend fun retryEncryption(): Boolean {
+        val stored = accountStore.load() ?: return false
+        return try {
+            xmppClient.connect(stored.config, stored.password)
+            xmppClient.omemoState.value.status == OmemoSessionStatus.READY
         } finally {
             stored.password.fill('\u0000')
         }

@@ -4,6 +4,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Test
 import java.io.IOException
+import java.security.NoSuchProviderException
 
 class OmemoFailureMessageTest {
     @Test
@@ -39,6 +40,30 @@ class OmemoFailureMessageTest {
             "OMEMO is active. Jarboa could not confirm public device discovery on this server; " +
                 "encrypted chats may require both people to add each other as contacts.",
             message,
+        )
+    }
+
+    @Test
+    fun `diagnostic code identifies crypto provider failure without exposing details`() {
+        val error = IllegalStateException(
+            "private wrapper",
+            NoSuchProviderException("private implementation name"),
+        )
+
+        assertEquals(
+            "OMEMO-INIT-PROVIDER",
+            omemoFailureDiagnosticCode(OmemoFailureStage.INITIALIZATION, error),
+        )
+    }
+
+    @Test
+    fun `diagnostic code distinguishes manager state failure`() {
+        assertEquals(
+            "OMEMO-MGR-STATE",
+            omemoFailureDiagnosticCode(
+                OmemoFailureStage.MANAGER,
+                IllegalStateException("private internal state"),
+            ),
         )
     }
 }

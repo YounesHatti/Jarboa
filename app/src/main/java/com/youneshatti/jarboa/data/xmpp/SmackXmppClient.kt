@@ -64,6 +64,7 @@ import org.jxmpp.jid.impl.JidCreate
 import org.jxmpp.jid.parts.Resourcepart
 import java.io.IOException
 import java.net.UnknownHostException
+import java.security.NoSuchProviderException
 import java.security.cert.CertificateException
 import javax.net.ssl.HttpsURLConnection
 import javax.net.ssl.SSLHandshakeException
@@ -456,6 +457,7 @@ class SmackXmppClient(
         mutableOmemoState.value = OmemoSessionState(
             status = OmemoSessionStatus.FAILED,
             detail = userFacingOmemoFailure(error),
+            diagnosticCode = omemoFailureDiagnosticCode(OmemoFailureStage.MANAGER, error),
         )
         null
     }
@@ -471,6 +473,7 @@ class SmackXmppClient(
             mutableOmemoState.value = OmemoSessionState(
                 status = OmemoSessionStatus.FAILED,
                 detail = userFacingOmemoFailure(error),
+                diagnosticCode = omemoFailureDiagnosticCode(OmemoFailureStage.INITIALIZATION, error),
             )
             return false
         }
@@ -626,6 +629,33 @@ internal fun userFacingOmemoFailure(error: Throwable): String {
         else ->
             "OMEMO setup failed. The account stays connected, but sending is blocked until Jarboa can retry."
     }
+}
+
+internal enum class OmemoFailureStage(val code: String) {
+    MANAGER("MGR"),
+    INITIALIZATION("INIT"),
+}
+
+/**
+ * Returns a stable, non-sensitive code that can be reported from the Settings screen. Exception
+ * messages are deliberately excluded because they may contain server or local filesystem details.
+ */
+internal fun omemoFailureDiagnosticCode(stage: OmemoFailureStage, error: Throwable): String {
+    val causes = generateSequence(error) { it.cause }.toList()
+    val category = when {
+        causes.any { it is CorruptedOmemoKeyException } -> "KEYS"
+        causes.any { it is NoSuchProviderException || it is ClassNotFoundException } -> "PROVIDER"
+        causes.any { it is NoClassDefFoundError || it is ExceptionInInitializerError || it is LinkageError } -> "LINKAGE"
+        causes.any { it is SmackException.NoResponseException } -> "TIMEOUT"
+        causes.any { it is SmackException.NotConnectedException || it is SmackException.NotLoggedInException } ->
+            "CONNECTION"
+        causes.any { it is PubSubException.NotALeafNodeException } -> "PUBSUB-NODE"
+        causes.any { it is XMPPException.XMPPErrorException } -> "SERVER"
+        causes.any { it is IOException || it is SecurityException } -> "STORAGE"
+        causes.any { it is IllegalStateException || it is AssertionError } -> "STATE"
+        else -> "UNEXPECTED"
+    }
+    return "OMEMO-${stage.code}-$category"
 }
 
 internal fun userFacingOmemoNodeAccessWarning(error: Throwable): String {
