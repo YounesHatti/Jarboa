@@ -15,6 +15,7 @@ All notable Jarboa changes will be recorded here. The project follows semantic v
 
 ### Fixed
 
+- Preserve libsignal's dynamically loaded Curve25519 provider in optimized release builds so OMEMO can generate its local identity.
 - Follow Smack's one-store OMEMO lifecycle instead of attempting to replace its cache after sign-out.
 - Treat the XEP-required public PEP-node check as an interoperability warning rather than disabling an otherwise initialized OMEMO session.
 - Initialize Smack's required Android networking support before the first XMPP connection.

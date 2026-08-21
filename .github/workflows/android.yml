@@ -28,6 +28,11 @@ jobs:
       - uses: gradle/actions/setup-gradle@v6
       - name: Verify and assemble
         run: ./gradlew --no-daemon lintDebug testDebugUnitTest assembleDebug assembleRelease --stacktrace
+      - name: Verify OMEMO crypto provider survives R8
+        run: |
+          APK=$(find app/build/outputs/apk/release -name '*.apk' -print -quit)
+          test -n "$APK"
+          unzip -p "$APK" 'classes*.dex' | strings | grep -Fq 'Lorg/whispersystems/curve25519/OpportunisticCurve25519Provider;'
       - uses: actions/upload-artifact@v7
         if: always()
         with:
