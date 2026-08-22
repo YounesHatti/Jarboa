@@ -66,4 +66,36 @@ class OmemoFailureMessageTest {
             ),
         )
     }
+
+    @Test
+    fun `linkage report includes exact missing runtime symbol`() {
+        val report = omemoFailureDiagnosticReport(
+            IllegalStateException(
+                "private wrapper",
+                NoSuchMethodError("No virtual method setup(Lorg/example/Key;)V"),
+            ),
+        )
+
+        assertEquals(
+            "Failure types: java.lang.IllegalStateException -> java.lang.NoSuchMethodError\n" +
+                "Runtime symbol: No virtual method setup(Lorg.example.Key;)V",
+            report,
+        )
+    }
+
+    @Test
+    fun `linkage report filters arbitrary characters and limits detail`() {
+        val privateMessage = "missing @user@example.org C:\\private\\keys " + "x".repeat(400)
+        val report = omemoFailureDiagnosticReport(NoClassDefFoundError(privateMessage))!!
+
+        assertFalse(report.contains("@"))
+        assertFalse(report.contains("\\"))
+        assertFalse(report.contains("example.org"))
+        assertFalse(report.contains("x".repeat(321)))
+    }
+
+    @Test
+    fun `non linkage failures do not expose technical reports`() {
+        assertEquals(null, omemoFailureDiagnosticReport(IOException("private path")))
+    }
 }

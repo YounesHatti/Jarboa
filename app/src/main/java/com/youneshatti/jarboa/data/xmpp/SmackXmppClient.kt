@@ -458,6 +458,7 @@ class SmackXmppClient(
             status = OmemoSessionStatus.FAILED,
             detail = userFacingOmemoFailure(error),
             diagnosticCode = omemoFailureDiagnosticCode(OmemoFailureStage.MANAGER, error),
+            diagnosticReport = omemoFailureDiagnosticReport(error),
         )
         null
     }
@@ -474,6 +475,7 @@ class SmackXmppClient(
                 status = OmemoSessionStatus.FAILED,
                 detail = userFacingOmemoFailure(error),
                 diagnosticCode = omemoFailureDiagnosticCode(OmemoFailureStage.INITIALIZATION, error),
+                diagnosticReport = omemoFailureDiagnosticReport(error),
             )
             return false
         }
@@ -657,6 +659,66 @@ internal fun omemoFailureDiagnosticCode(stage: OmemoFailureStage, error: Throwab
     }
     return "OMEMO-${stage.code}-$category"
 }
+
+/**
+ * Exposes only runtime type and symbol information needed to diagnose binary linkage failures.
+ * Arbitrary exception messages are never included: they can contain JIDs, server text, or paths.
+ */
+internal fun omemoFailureDiagnosticReport(error: Throwable): String? {
+    val causes = generateSequence(error) { it.cause }.take(MAX_DIAGNOSTIC_CAUSES).toList()
+    val linkage = causes.firstOrNull { it is LinkageError } as? LinkageError ?: return null
+    val causeTypes = causes.joinToString(" -> ") { it.javaClass.name }
+    val symbol = when (linkage) {
+        is NoClassDefFoundError,
+        is NoSuchMethodError,
+        is NoSuchFieldError,
+        is AbstractMethodError,
+        is VerifyError,
+        is UnsupportedClassVersionError,
+        is ClassFormatError,
+        -> linkage.message?.toSafeRuntimeSymbol()
+        else -> null
+    }
+    return buildString {
+        append("Failure types: ")
+        append(causeTypes)
+        if (!symbol.isNullOrBlank()) {
+            append('\n')
+            append("Runtime symbol: ")
+            append(symbol)
+        }
+    }
+}
+
+private fun String.toSafeRuntimeSymbol(): String {
+    val relevantDetail = substringBefore(" (declaration of").trim()
+    if (
+        relevantDetail.contains('@') ||
+        relevantDetail.contains('\\') ||
+        WINDOWS_PATH_PATTERN.containsMatchIn(relevantDetail) ||
+        relevantDetail.contains("/data/")
+    ) {
+        return "Runtime supplied unsafe detail; value redacted"
+    }
+    val safe = buildString(relevantDetail.length.coerceAtMost(MAX_DIAGNOSTIC_SYMBOL_LENGTH)) {
+        relevantDetail.take(MAX_DIAGNOSTIC_SYMBOL_LENGTH).forEach { character ->
+            append(
+                when {
+                    character.isLetterOrDigit() -> character
+                    character == '/' -> '.'
+                    character in SAFE_DIAGNOSTIC_SYMBOL_CHARACTERS -> character
+                    else -> '?'
+                },
+            )
+        }
+    }
+    return safe.trim()
+}
+
+private const val MAX_DIAGNOSTIC_CAUSES = 5
+private const val MAX_DIAGNOSTIC_SYMBOL_LENGTH = 320
+private const val SAFE_DIAGNOSTIC_SYMBOL_CHARACTERS = " _.$;:<>[]()',-"
+private val WINDOWS_PATH_PATTERN = Regex("[A-Za-z]:[/\\\\]")
 
 internal fun userFacingOmemoNodeAccessWarning(error: Throwable): String {
     val causes = generateSequence(error) { it.cause }.toList()
