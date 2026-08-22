@@ -189,6 +189,19 @@ class MainViewModel(
         mutableNotificationPrivacy.value = hidden
     }
 
+    fun retryEncryption() {
+        if (mutableBusy.value) return
+        viewModelScope.launch {
+            mutableBusy.value = true
+            mutableError.value = null
+            runCatching { container.retryEncryption() }
+                .onFailure {
+                    mutableError.value = "Jarboa could not reconnect. Check the connection status and try again."
+                }
+            mutableBusy.value = false
+        }
+    }
+
     fun dismissError() {
         mutableError.value = null
     }
