@@ -6,11 +6,9 @@ import com.youneshatti.jarboa.data.local.JarboaDatabase
 import com.youneshatti.jarboa.data.message.MessageRepository
 import com.youneshatti.jarboa.data.security.OmemoTrustStore
 import com.youneshatti.jarboa.data.security.SecureAccountStore
-import com.youneshatti.jarboa.data.xmpp.OmemoBootstrap
 import com.youneshatti.jarboa.data.xmpp.SmackXmppClient
 import com.youneshatti.jarboa.data.xmpp.XmppEvent
 import com.youneshatti.jarboa.domain.model.AccountConfig
-import com.youneshatti.jarboa.domain.model.OmemoSessionStatus
 import com.youneshatti.jarboa.domain.model.XmppConnectionState
 import com.youneshatti.jarboa.notifications.JarboaNotifier
 import com.youneshatti.jarboa.settings.SettingsStore
@@ -21,7 +19,6 @@ import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.jivesoftware.smack.android.AndroidSmackInitializer
-import org.jxmpp.jid.impl.JidCreate
 import java.io.File
 
 class JarboaApplication : Application() {
@@ -40,10 +37,6 @@ class AppContainer(application: Application) {
     private val omemoDirectory = File(application.noBackupFilesDir, "omemo")
     private val omemoTrustStore = OmemoTrustStore(application)
 
-    init {
-        OmemoBootstrap.initialize(omemoDirectory)
-    }
-
     private val database = Room.databaseBuilder(
         application,
         JarboaDatabase::class.java,
@@ -53,7 +46,7 @@ class AppContainer(application: Application) {
     val accountStore = SecureAccountStore(application)
     val settingsStore = SettingsStore(application)
     val messageRepository = MessageRepository(database)
-    val xmppClient = SmackXmppClient(omemoTrustStore)
+    val xmppClient = SmackXmppClient()
     private val notifier = JarboaNotifier(application, settingsStore)
 
     init {
@@ -106,20 +99,6 @@ class AppContainer(application: Application) {
         }
     }
 
-    /**
-     * Creates a fresh authenticated XMPP connection and OMEMO manager without deleting the
-     * account, message history, trust decisions, or local encryption keys.
-     */
-    suspend fun retryEncryption(): Boolean {
-        val stored = accountStore.load() ?: return false
-        return try {
-            xmppClient.connect(stored.config, stored.password)
-            xmppClient.omemoState.value.status == OmemoSessionStatus.READY
-        } finally {
-            stored.password.fill('\u0000')
-        }
-    }
-
     suspend fun sendMessage(recipientJid: String, body: String) {
         val senderJid = when (val current = xmppClient.connectionState.value) {
             is XmppConnectionState.Connected -> current.boundJid
@@ -139,17 +118,12 @@ class AppContainer(application: Application) {
     }
 
     suspend fun signOut() = withContext(Dispatchers.IO) {
-        val account = accountStore.loadConfig()
         xmppClient.disconnect()
-        account?.let { OmemoBootstrap.purgeLocalDevices(JidCreate.entityBareFrom(it.jid)) }
         accountStore.clear()
         database.clearAllTables()
         omemoTrustStore.clear()
         check(omemoDirectory.deleteRecursively() || !omemoDirectory.exists()) {
-            "Jarboa could not erase its local OMEMO keys."
-        }
-        check(omemoDirectory.mkdirs() || omemoDirectory.isDirectory) {
-            "Jarboa could not recreate its private OMEMO key directory."
+            "Jarboa could not erase its retired local encryption data."
         }
         notifier.cancelAll()
     }

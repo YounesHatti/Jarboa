@@ -66,6 +66,7 @@ data class OmemoContactSecurity(
 enum class MessageEncryption {
     LEGACY_PLAINTEXT,
     UNENCRYPTED_INCOMING,
+    UNENCRYPTED_OUTGOING,
     OMEMO_UNVERIFIED,
     OMEMO_VERIFIED,
     OMEMO_KEY_CHANGED,

@@ -4,14 +4,21 @@ All notable Jarboa changes will be recorded here. The project follows semantic v
 
 ## [Unreleased]
 
+### Changed
+
+- Temporarily disable the experimental OMEMO runtime and restore direct plaintext messaging while the encryption implementation is redesigned and tested.
+- Keep existing local databases upgrade-compatible and erase retired OMEMO data on sign-out.
+- Label new outgoing messages as unencrypted and show a persistent red warning that the XMPP server can read message contents.
+
+### Security
+
+- Continue to require validated TLS for every XMPP connection, but make clear that TLS does not hide plaintext messages from the server.
+- Approve reciprocal presence requests only for contacts the user already added; continue rejecting unknown requests.
+
 ### Added
 
 - Synchronize the account's XMPP roster in the Contacts tab.
 - Add a contact and request a mutual presence subscription whenever a direct chat is opened.
-
-### Security
-
-- Approve reciprocal presence requests only for contacts the user already added; continue rejecting unknown requests.
 
 ### Fixed
 
