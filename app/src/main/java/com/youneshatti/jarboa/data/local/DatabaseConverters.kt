@@ -1,7 +1,6 @@
 package com.youneshatti.jarboa.data.local
 
 import androidx.room.TypeConverter
-import com.youneshatti.jarboa.domain.model.MessageEncryption
 import com.youneshatti.jarboa.domain.model.MessageStatus
 
 class DatabaseConverters {
@@ -10,10 +9,5 @@ class DatabaseConverters {
 
     @TypeConverter
     fun stringToMessageStatus(value: String): MessageStatus = MessageStatus.valueOf(value)
-
-    @TypeConverter
-    fun messageEncryptionToString(encryption: MessageEncryption): String = encryption.name
-
-    @TypeConverter
-    fun stringToMessageEncryption(value: String): MessageEncryption = MessageEncryption.valueOf(value)
 }
+

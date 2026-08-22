@@ -9,7 +9,6 @@ import com.youneshatti.jarboa.domain.model.AccountConfig
 import com.youneshatti.jarboa.domain.model.Conversation
 import com.youneshatti.jarboa.domain.model.DirectMessage
 import com.youneshatti.jarboa.domain.model.XmppConnectionState
-import com.youneshatti.jarboa.domain.model.XmppContact
 import com.youneshatti.jarboa.domain.validation.JidValidationResult
 import com.youneshatti.jarboa.domain.validation.XmppAddressValidator
 import com.youneshatti.jarboa.service.XmppConnectionService
@@ -18,7 +17,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -38,22 +36,11 @@ class MainViewModel(
     val selectedConversation: StateFlow<String?> = mutableSelectedConversation.asStateFlow()
     val hideNotificationContent: StateFlow<Boolean> = mutableNotificationPrivacy.asStateFlow()
     val connectionState: StateFlow<XmppConnectionState> = container.xmppClient.connectionState
-    val contacts: StateFlow<List<XmppContact>> = container.xmppClient.contacts
     val conversations: StateFlow<List<Conversation>> = container.messageRepository.conversations.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5_000),
         initialValue = emptyList(),
     )
-
-    init {
-        viewModelScope.launch {
-            connectionState.collect { state ->
-                if (state is XmppConnectionState.Connected) {
-                    mutableSelectedConversation.value?.let(::prepareConversationContact)
-                }
-            }
-        }
-    }
 
     fun messages(jid: String): Flow<List<DirectMessage>> = container.messageRepository.messages(jid)
 
@@ -92,8 +79,8 @@ class MainViewModel(
             result.onSuccess {
                 mutableSignedIn.value = true
                 XmppConnectionService.start(getApplication())
-            }.onFailure {
-                mutableError.value = signInFailureMessage(connectionState.value)
+            }.onFailure { failure ->
+                mutableError.value = failure.message ?: "Jarboa could not sign in. Check the account and server."
             }
             mutableBusy.value = false
         }
@@ -109,22 +96,10 @@ class MainViewModel(
         }
         mutableSelectedConversation.value = normalized
         viewModelScope.launch { container.messageRepository.markConversationRead(normalized) }
-        prepareConversationContact(normalized)
     }
 
     fun closeConversation() {
         mutableSelectedConversation.value = null
-    }
-
-    private fun prepareConversationContact(jid: String) {
-        viewModelScope.launch {
-            runCatching { container.xmppClient.addContact(jid) }
-                .onFailure {
-                    if (mutableSelectedConversation.value == jid) {
-                        mutableError.value = "Jarboa could not add this address to Contacts."
-                    }
-                }
-        }
     }
 
     fun sendMessage(recipientJid: String, body: String) {
@@ -169,7 +144,3 @@ class MainViewModel(
         }
     }
 }
-
-internal fun signInFailureMessage(connectionState: XmppConnectionState): String =
-    (connectionState as? XmppConnectionState.Failed)?.detail
-        ?: "Jarboa could not sign in. Check the account and server."

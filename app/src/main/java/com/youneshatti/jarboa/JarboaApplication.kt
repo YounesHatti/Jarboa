@@ -4,7 +4,6 @@ import android.app.Application
 import androidx.room.Room
 import com.youneshatti.jarboa.data.local.JarboaDatabase
 import com.youneshatti.jarboa.data.message.MessageRepository
-import com.youneshatti.jarboa.data.security.OmemoTrustStore
 import com.youneshatti.jarboa.data.security.SecureAccountStore
 import com.youneshatti.jarboa.data.xmpp.SmackXmppClient
 import com.youneshatti.jarboa.data.xmpp.XmppEvent
@@ -18,8 +17,6 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import org.jivesoftware.smack.android.AndroidSmackInitializer
-import java.io.File
 
 class JarboaApplication : Application() {
     lateinit var container: AppContainer
@@ -27,21 +24,17 @@ class JarboaApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
-        AndroidSmackInitializer.initialize(this)
         container = AppContainer(this)
     }
 }
 
 class AppContainer(application: Application) {
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val omemoDirectory = File(application.noBackupFilesDir, "omemo")
-    private val omemoTrustStore = OmemoTrustStore(application)
-
     private val database = Room.databaseBuilder(
         application,
         JarboaDatabase::class.java,
         "jarboa.db",
-    ).addMigrations(JarboaDatabase.MIGRATION_1_2).build()
+    ).build()
 
     val accountStore = SecureAccountStore(application)
     val settingsStore = SettingsStore(application)
@@ -60,9 +53,6 @@ class AppContainer(application: Application) {
                             stanzaId = event.stanzaId,
                             body = event.body,
                             timestamp = event.timestamp,
-                            encryption = event.encryption,
-                            senderDeviceId = event.senderDeviceId,
-                            senderFingerprint = event.senderFingerprint,
                         )
                         if (isNew) notifier.notifyIncoming(event.senderJid, event.body)
                     }
@@ -109,8 +99,8 @@ class AppContainer(application: Application) {
         }
         val local = messageRepository.prepareOutgoing(recipientJid, senderJid, body)
         try {
-            val result = xmppClient.sendDirectMessage(recipientJid, body, local.id)
-            messageRepository.markSent(local.id, result.encryption)
+            xmppClient.sendDirectMessage(recipientJid, body, local.id)
+            messageRepository.markSent(local.id)
         } catch (error: Throwable) {
             messageRepository.markFailed(local.id)
             throw error
@@ -121,10 +111,6 @@ class AppContainer(application: Application) {
         xmppClient.disconnect()
         accountStore.clear()
         database.clearAllTables()
-        omemoTrustStore.clear()
-        check(omemoDirectory.deleteRecursively() || !omemoDirectory.exists()) {
-            "Jarboa could not erase its retired local encryption data."
-        }
         notifier.cancelAll()
     }
 }

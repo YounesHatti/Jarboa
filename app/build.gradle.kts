@@ -24,8 +24,8 @@ android {
         applicationId = "com.youneshatti.jarboa"
         minSdk = 28
         targetSdk = 36
-        versionCode = providers.gradleProperty("VERSION_CODE").orNull?.toIntOrNull() ?: 200001
-        versionName = providers.gradleProperty("VERSION_NAME").orNull ?: "0.2.0-beta.1"
+        versionCode = providers.gradleProperty("VERSION_CODE").orNull?.toIntOrNull() ?: 1
+        versionName = providers.gradleProperty("VERSION_NAME").orNull ?: "0.1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -113,7 +113,6 @@ dependencies {
     implementation("org.igniterealtime.smack:smack-tcp:$smackVersion")
     implementation("org.igniterealtime.smack:smack-im:$smackVersion")
     implementation("org.igniterealtime.smack:smack-extensions:$smackVersion")
-    implementation("org.igniterealtime.smack:smack-omemo-signal:$smackVersion")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")

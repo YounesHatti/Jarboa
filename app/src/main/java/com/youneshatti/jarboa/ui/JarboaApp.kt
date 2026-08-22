@@ -70,12 +70,9 @@ import com.youneshatti.jarboa.BuildConfig
 import com.youneshatti.jarboa.MainViewModel
 import com.youneshatti.jarboa.R
 import com.youneshatti.jarboa.domain.model.Conversation
-import com.youneshatti.jarboa.domain.model.ContactSubscriptionState
 import com.youneshatti.jarboa.domain.model.DirectMessage
-import com.youneshatti.jarboa.domain.model.MessageEncryption
 import com.youneshatti.jarboa.domain.model.MessageStatus
 import com.youneshatti.jarboa.domain.model.XmppConnectionState
-import com.youneshatti.jarboa.domain.model.XmppContact
 import com.youneshatti.jarboa.domain.validation.JidValidationResult
 import com.youneshatti.jarboa.domain.validation.XmppAddressValidator
 import java.time.Instant
@@ -193,12 +190,12 @@ private fun SignInScreen(
                 if (busy) {
                     CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.dp)
                 } else {
-                    Text("Connect")
+                    Text("Connect securely")
                 }
             }
             Spacer(Modifier.height(16.dp))
             Text(
-                "TLS protects the connection to the server. Messages are not end-to-end encrypted in this build.",
+                "TLS certificate validation is required. This first release does not yet provide OMEMO end-to-end encryption.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -232,7 +229,6 @@ private fun HomeScreen(viewModel: MainViewModel, busy: Boolean) {
     val selectedConversation by viewModel.selectedConversation.collectAsStateWithLifecycle()
     val connectionState by viewModel.connectionState.collectAsStateWithLifecycle()
     val conversations by viewModel.conversations.collectAsStateWithLifecycle()
-    val contacts by viewModel.contacts.collectAsStateWithLifecycle()
 
     if (selectedConversation != null) {
         ConversationScreen(
@@ -268,7 +264,7 @@ private fun HomeScreen(viewModel: MainViewModel, busy: Boolean) {
             }
         },
         floatingActionButton = {
-            if (tab == HomeTab.CHATS || tab == HomeTab.CONTACTS) {
+            if (tab == HomeTab.CHATS) {
                 FloatingActionButton(onClick = { showNewChat = true }) { Text("+", style = MaterialTheme.typography.headlineSmall) }
             }
         },
@@ -281,10 +277,9 @@ private fun HomeScreen(viewModel: MainViewModel, busy: Boolean) {
                 onNewChat = { showNewChat = true },
                 modifier = Modifier.padding(padding),
             )
-            HomeTab.CONTACTS -> ContactsScreen(
-                contacts = contacts,
-                onContact = viewModel::openConversation,
-                onAddContact = { showNewChat = true },
+            HomeTab.CONTACTS -> PhasePlaceholder(
+                title = "Contacts are next",
+                detail = "Roster sync and presence are planned for Phase 0.3.0. You can start a direct chat now from the Chats tab.",
                 modifier = Modifier.padding(padding),
             )
             HomeTab.SETTINGS -> SettingsScreen(
@@ -376,71 +371,6 @@ private fun ChatsScreen(
     }
 }
 
-@Composable
-private fun ContactsScreen(
-    contacts: List<XmppContact>,
-    onContact: (String) -> Unit,
-    onAddContact: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    if (contacts.isEmpty()) {
-        PhasePlaceholder(
-            title = "No contacts yet",
-            detail = "Add a full XMPP address. Jarboa will request a mutual contact subscription.",
-            actionLabel = "Add contact",
-            onAction = onAddContact,
-            modifier = modifier,
-        )
-        return
-    }
-    LazyColumn(modifier = modifier.fillMaxSize()) {
-        items(contacts, key = XmppContact::jid) { contact ->
-            Row(
-                modifier = Modifier.fillMaxWidth().clickable { onContact(contact.jid) }.padding(18.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Box(
-                    modifier = Modifier.size(44.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceVariant),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(contact.displayName.take(1).uppercase(), fontWeight = FontWeight.Black)
-                }
-                Spacer(Modifier.width(14.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(contact.displayName, fontWeight = FontWeight.Bold, maxLines = 1)
-                    Text(
-                        contact.jid,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Text(
-                        contact.subscriptionState.label,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = contact.subscriptionState.color,
-                    )
-                }
-            }
-            HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
-        }
-    }
-}
-
-private val ContactSubscriptionState.label: String
-    get() = when (this) {
-        ContactSubscriptionState.MUTUAL -> "Mutual contact"
-        ContactSubscriptionState.REQUEST_SENT -> "Contact request sent"
-        ContactSubscriptionState.ONE_WAY -> "One-way contact · waiting for mutual approval"
-        ContactSubscriptionState.ADDED -> "Added · waiting for approval"
-    }
-
-private val ContactSubscriptionState.color: Color
-    @Composable get() = if (this == ContactSubscriptionState.MUTUAL) {
-        Color(0xFFB9F6CA)
-    } else {
-        MaterialTheme.colorScheme.onSurfaceVariant
-    }
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ConversationScreen(
@@ -480,15 +410,12 @@ private fun ConversationScreen(
                     value = draft,
                     onValueChange = { draft = it.take(4096) },
                     modifier = Modifier.weight(1f),
-                    enabled = connectionState is XmppConnectionState.Connected,
                     placeholder = { Text("Message") },
                     maxLines = 4,
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
                     keyboardActions = KeyboardActions(onSend = {
-                        if (draft.isNotBlank()) {
-                            viewModel.sendMessage(jid, draft)
-                            draft = ""
-                        }
+                        viewModel.sendMessage(jid, draft)
+                        draft = ""
                     }),
                 )
                 Spacer(Modifier.width(10.dp))
@@ -505,7 +432,14 @@ private fun ConversationScreen(
         containerColor = Color.Black,
     ) { padding ->
         Column(modifier = Modifier.padding(padding).fillMaxSize()) {
-            UnencryptedWarningBanner()
+            Surface(color = Color(0xFF2A2418), contentColor = Color(0xFFFFE0A3)) {
+                Text(
+                    "UNENCRYPTED · OMEMO IS PLANNED FOR PHASE 0.2.0",
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 9.dp),
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
             if (messages.isEmpty()) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Text("Start the conversation", color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -525,22 +459,6 @@ private fun ConversationScreen(
 }
 
 @Composable
-private fun UnencryptedWarningBanner() {
-    Surface(
-        color = Color(0xFF3A1515),
-        contentColor = Color(0xFFFFB4AB),
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        Text(
-            "UNENCRYPTED · THE SERVER CAN READ MESSAGES",
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 9.dp),
-            style = MaterialTheme.typography.labelSmall,
-            fontWeight = FontWeight.Bold,
-        )
-    }
-}
-
-@Composable
 private fun MessageBubble(message: DirectMessage) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -555,8 +473,6 @@ private fun MessageBubble(message: DirectMessage) {
             Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
                 Text(message.body)
                 Row(modifier = Modifier.align(Alignment.End), verticalAlignment = Alignment.CenterVertically) {
-                    Text(message.encryption.label, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
-                    Spacer(Modifier.width(7.dp))
                     Text(formatMessageTime(message.timestamp), style = MaterialTheme.typography.labelSmall)
                     if (message.outgoing) {
                         Spacer(Modifier.width(7.dp))
@@ -574,16 +490,6 @@ private val MessageStatus.label: String
         MessageStatus.SENT -> "SENT"
         MessageStatus.DELIVERED -> "DELIVERED"
         MessageStatus.FAILED -> "FAILED"
-    }
-
-private val MessageEncryption.label: String
-    get() = when (this) {
-        MessageEncryption.LEGACY_PLAINTEXT -> "LEGACY PLAINTEXT"
-        MessageEncryption.UNENCRYPTED_INCOMING -> "UNENCRYPTED"
-        MessageEncryption.UNENCRYPTED_OUTGOING -> "UNENCRYPTED"
-        MessageEncryption.OMEMO_UNVERIFIED -> "OMEMO"
-        MessageEncryption.OMEMO_VERIFIED -> "OMEMO VERIFIED"
-        MessageEncryption.OMEMO_KEY_CHANGED -> "OMEMO KEY CHANGED"
     }
 
 @Composable
@@ -612,13 +518,10 @@ private fun SettingsScreen(
             }
         }
         item {
-            SettingsCard("Message security") {
-                Text("End-to-end encryption is disabled in this build.")
+            SettingsCard("Encryption status") {
+                Text("Direct chats are not end-to-end encrypted in ${BuildConfig.VERSION_NAME}.")
                 Spacer(Modifier.height(6.dp))
-                Text(
-                    "TLS protects traffic between Jarboa and your XMPP server, but the server can read message contents. Do not use this test build for sensitive conversations.",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                Text("OMEMO is a gated Phase 0.2.0 milestone.", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
         item {
@@ -699,7 +602,7 @@ private fun NewChatDialog(onDismiss: () -> Unit, onOpen: (String) -> Unit) {
     }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Add contact") },
+        title = { Text("New direct chat") },
         text = {
             OutlinedTextField(
                 value = jid,
@@ -716,7 +619,7 @@ private fun NewChatDialog(onDismiss: () -> Unit, onOpen: (String) -> Unit) {
                 keyboardActions = KeyboardActions(onDone = { submit() }),
             )
         },
-        confirmButton = { TextButton(onClick = { submit() }) { Text("Add & open") } },
+        confirmButton = { TextButton(onClick = { submit() }) { Text("Open") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )
 }
