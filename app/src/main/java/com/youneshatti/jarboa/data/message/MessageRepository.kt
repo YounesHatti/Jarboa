@@ -32,7 +32,7 @@ class MessageRepository(private val database: JarboaDatabase) {
             timestamp = timestamp,
             outgoing = true,
             status = MessageStatus.PENDING,
-            encryption = MessageEncryption.OMEMO_UNVERIFIED,
+            encryption = MessageEncryption.UNENCRYPTED_OUTGOING,
         )
         val messageWithStanzaId = message.copy(stanzaId = message.id)
         database.withTransaction {

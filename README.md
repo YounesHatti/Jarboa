@@ -3,17 +3,15 @@
 Jarboa is a small, privacy-focused XMPP messenger for Android and GrapheneOS. It is built in Kotlin with Jetpack Compose, Room, Android Keystore, and Smack, with no dependency on Google Play services.
 
 > [!WARNING]
-> Jarboa is in early beta. Version 0.2.0-beta.1 adds OMEMO, but it has not received an independent security audit or broad interoperability testing. Treat the beta as test software rather than a high-risk communications tool.
+> Jarboa is early test software. End-to-end encryption is temporarily disabled while its OMEMO implementation is redesigned and tested. Current messages are plaintext to the XMPP server and must not be used for sensitive conversations.
 
-## Current milestone: 0.2.0 beta
+## Current milestone: restore reliable messaging
 
 - XMPP sign-in with an optional host and port override
 - Mandatory TLS with platform certificate and hostname validation
 - Direct one-to-one messages and delivery receipts
-- OMEMO-encrypted outgoing direct messages with no plaintext fallback
-- Persistent device keys, automatic signed-prekey rotation, and fingerprint verification
-- Explicit first-seen, verified, distrusted, and changed-key states
-- Visible warnings for incoming plaintext and legacy 0.1.x history
+- Clearly labeled unencrypted direct messages
+- A persistent in-chat warning that the XMPP server can read message contents
 - Stream management and automatic reconnection
 - Room-backed local conversations and messages
 - Keystore-encrypted account credentials
@@ -22,7 +20,7 @@ Jarboa is a small, privacy-focused XMPP messenger for Android and GrapheneOS. It
 - Server-synchronized XMPP contacts with safe mutual presence requests
 - Android 9 (API 28) and later; compile/target SDK 36
 
-Encrypted attachments, groups, calls, multi-account support, and carbon-copy history synchronization are not part of this beta.
+OMEMO, encrypted attachments, groups, calls, multi-account support, and carbon-copy history synchronization are not active in this build.
 
 ## Install and updates
 
@@ -47,7 +45,7 @@ The debug APK is written below `app/build/outputs/apk/debug/`. Release signing i
 
 ## Security and privacy
 
-Read [SECURITY.md](SECURITY.md) before testing with a real account. The implementation avoids cleartext traffic, backups, analytics, advertising SDKs, and Play services. OMEMO protects message bodies in supported direct chats, while servers can still observe metadata and endpoints can still expose plaintext.
+Read [SECURITY.md](SECURITY.md) before testing with a real account. The implementation avoids cleartext network connections, backups, analytics, advertising SDKs, and Play services. TLS protects traffic in transit to the XMPP server, but the server can read current message bodies because end-to-end encryption is disabled.
 
 Architecture and trust boundaries are documented in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
