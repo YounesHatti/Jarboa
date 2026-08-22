@@ -121,13 +121,17 @@ class SmackXmppClient(
                         throw SSLHandshakeException("The server did not establish a validated TLS session.")
                     }
                     configureMessaging(newConnection)
-                    val manager = prepareOmemoManager(newConnection)
                     state.value = XmppConnectionState.Authenticating
                     newConnection.login()
                     ReconnectionManager.getInstanceFor(newConnection).enableAutomaticReconnection()
                     runCatching { refreshRoster(activeRoster, reload = !activeRoster.isLoaded) }
                     state.value = XmppConnectionState.Connected(newConnection.user.asBareJid().toString())
-                    manager?.let(::initializeOmemo)
+
+                    // OmemoManager registers an authenticated connection callback when it is
+                    // created before login. A store or crypto failure in that callback then escapes
+                    // from Smack's login() and tears down an otherwise valid XMPP session. Attach
+                    // OMEMO only after authentication so prepare/initialize failures remain isolated.
+                    prepareOmemoManager(newConnection)?.let(::initializeOmemo)
                     Unit
                 } catch (error: Throwable) {
                     disconnectCurrent(resetOmemoState = false)
