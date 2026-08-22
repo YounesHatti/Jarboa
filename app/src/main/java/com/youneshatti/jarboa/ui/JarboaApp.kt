@@ -725,6 +725,14 @@ private fun SettingsScreen(
                 omemoState.diagnosticCode?.let { code ->
                     Text("Diagnostic code: $code", style = MaterialTheme.typography.bodySmall)
                 }
+                omemoState.diagnosticReport?.let { report ->
+                    Text(
+                        "Technical report (safe to share)",
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    Text(report, style = MaterialTheme.typography.bodySmall)
+                }
                 omemoState.ownFingerprint?.let { fingerprint ->
                     Text("This device", fontWeight = FontWeight.Bold)
                     Text(fingerprint.blocksOfEight(), style = MaterialTheme.typography.bodySmall)
