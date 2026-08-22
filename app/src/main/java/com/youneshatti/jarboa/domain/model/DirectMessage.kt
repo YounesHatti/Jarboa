@@ -8,9 +8,6 @@ data class DirectMessage(
     val timestamp: Long,
     val outgoing: Boolean,
     val status: MessageStatus,
-    val encryption: MessageEncryption,
-    val senderDeviceId: Int? = null,
-    val senderFingerprint: String? = null,
 )
 
 enum class MessageStatus {
@@ -19,3 +16,4 @@ enum class MessageStatus {
     DELIVERED,
     FAILED,
 }
+

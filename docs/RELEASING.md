@@ -16,11 +16,11 @@ Repository releases also require the protected `release` environment. Limit appr
 ## Release checklist
 
 1. Review the milestone, dependency licenses, `SECURITY.md`, and user-visible encryption claims.
-2. Update the changelog. The release workflow derives `VERSION_NAME` and a monotonic `VERSION_CODE` from `vX.Y.Z` or `vX.Y.Z-beta.N`.
+2. Update the changelog. The release workflow derives `VERSION_NAME` and a monotonic `VERSION_CODE` from the semantic version tag.
 3. Run `./gradlew clean lintDebug testDebugUnitTest assembleDebug` on a clean checkout.
 4. Test sign-in failure, invalid TLS, offline recovery, send/receive, receipt state, process recreation, notification privacy, and sign-out erasure on GrapheneOS.
 5. Merge only a green reviewed pull request to `main`.
-6. Create and push an annotated `vX.Y.Z` tag, or `vX.Y.Z-beta.N` for a prerelease, from that exact commit. The release workflow builds the signed APK and checksum from the tag.
+6. Create and push an annotated `vX.Y.Z` tag from that exact commit. The release workflow builds the signed APK and checksum from the tag.
 7. Compare the release certificate fingerprint with the recorded permanent identity and independently verify the SHA-256 checksum.
 8. Install as an update over the previous release on a test device before marking the GitHub release stable.
 

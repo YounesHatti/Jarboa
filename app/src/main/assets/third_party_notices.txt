@@ -1,9 +1,5 @@
 Jarboa includes AndroidX, Jetpack Compose, Kotlin coroutines, Room, JXMPP, MiniDNS, and Smack components. Their licenses are shipped with their corresponding artifacts. Source and the resolved dependency inventory are available at https://github.com/YounesHatti/Jarboa.
 
-OMEMO
-
-Jarboa includes smack-omemo-signal 4.4.8 and signal-protocol-java 2.6.2. The Smack OMEMO Signal module is distributed under GNU GPL version 3 or any later version. Jarboa and its complete corresponding source are distributed under compatible GPL-3.0-or-later terms.
-
 SMACK
 
 An open-source XMPP library maintained by Florian Schmaus

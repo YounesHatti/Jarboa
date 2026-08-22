@@ -27,26 +27,21 @@ class SecureAccountStore(
     }
 
     fun load(): StoredAccount? {
-        val config = loadConfig() ?: return null
+        val jid = preferences.getString(KEY_JID, null) ?: return null
         val encryptedPassword = preferences.getString(KEY_PASSWORD, null) ?: return null
         val passwordBytes = cipher.decrypt(encryptedPassword)
         return try {
             StoredAccount(
-                config = config,
+                config = AccountConfig(
+                    jid = jid,
+                    serverHost = preferences.getString(KEY_HOST, null),
+                    serverPort = preferences.getInt(KEY_PORT, AccountConfig.DEFAULT_XMPP_PORT),
+                ),
                 password = decode(passwordBytes),
             )
         } finally {
             passwordBytes.fill(0)
         }
-    }
-
-    fun loadConfig(): AccountConfig? {
-        val jid = preferences.getString(KEY_JID, null) ?: return null
-        return AccountConfig(
-            jid = jid,
-            serverHost = preferences.getString(KEY_HOST, null),
-            serverPort = preferences.getInt(KEY_PORT, AccountConfig.DEFAULT_XMPP_PORT),
-        )
     }
 
     fun hasAccount(): Boolean = preferences.contains(KEY_JID) && preferences.contains(KEY_PASSWORD)
@@ -79,3 +74,4 @@ data class StoredAccount(
     val config: AccountConfig,
     val password: CharArray,
 )
+
