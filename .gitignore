@@ -16,3 +16,7 @@ signing/
 *.aab
 *.sha256
 .DS_Store
+# Generated only by the disposable CI runtime test.
+ci/runtime/
+ci/prosody.log
+app/src/runtimeCheck/res/raw/ci_ca.pem

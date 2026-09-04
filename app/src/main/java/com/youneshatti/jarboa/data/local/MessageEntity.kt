@@ -4,6 +4,7 @@ import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
+import com.youneshatti.jarboa.domain.model.MessageEncryption
 import com.youneshatti.jarboa.domain.model.MessageStatus
 
 @Entity(
@@ -30,5 +31,7 @@ data class MessageEntity(
     val timestamp: Long,
     val outgoing: Boolean,
     val status: MessageStatus,
+    val encryption: MessageEncryption,
+    val senderDeviceId: Int? = null,
+    val senderFingerprint: String? = null,
 )
-

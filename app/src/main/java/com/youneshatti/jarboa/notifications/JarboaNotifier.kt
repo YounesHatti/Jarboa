@@ -40,7 +40,7 @@ class JarboaNotifier(
     }
 
     fun connectionNotification(): Notification = NotificationCompat.Builder(context, CONNECTION_CHANNEL_ID)
-        .setSmallIcon(R.drawable.ic_notification)
+        .setSmallIcon(R.drawable.ic_jarboa_monochrome)
         .setContentTitle(context.getString(R.string.connection_notification_title))
         .setContentText(context.getString(R.string.connection_notification_text))
         .setContentIntent(openAppIntent())
@@ -52,7 +52,7 @@ class JarboaNotifier(
     fun notifyIncoming(senderJid: String, body: String) {
         val private = settingsStore.hideNotificationContent
         val notification = NotificationCompat.Builder(context, MESSAGE_CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_notification)
+            .setSmallIcon(R.drawable.ic_jarboa_monochrome)
             .setContentTitle(if (private) "New Jarboa message" else senderJid)
             .setContentText(if (private) "Open Jarboa to read it." else body)
             .setContentIntent(openAppIntent())
