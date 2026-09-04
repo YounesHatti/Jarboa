@@ -4,7 +4,7 @@ set -euo pipefail
 sudo apt-get update -qq
 sudo apt-get install -y prosody
 sudo systemctl stop prosody
-RUNTIME="$PWD/ci/runtime"
+RUNTIME="$(mktemp -d /tmp/jarboa-xmpp.XXXXXX)"
 mkdir -p "$RUNTIME/data" app/src/runtimeCheck/res/raw
 openssl req -x509 -newkey rsa:2048 -nodes -days 2 \
   -keyout "$RUNTIME/server.key" -out "$RUNTIME/server.crt" \
