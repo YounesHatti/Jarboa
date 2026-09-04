@@ -20,3 +20,4 @@ signing/
 ci/runtime/
 ci/prosody.log
 app/src/runtimeCheck/res/raw/ci_ca.pem
+/.local/

@@ -26,9 +26,10 @@ ssl = { key = "$RUNTIME/server.key"; certificate = "$RUNTIME/server.crt"; }
 VirtualHost "jarboa.test"
 EOF
 sudo chown -R prosody:prosody "$RUNTIME"
-sudo -u prosody prosodyctl --config "$RUNTIME/prosody.cfg.lua" register alice jarboa.test ci-alice-password
-sudo -u prosody prosodyctl --config "$RUNTIME/prosody.cfg.lua" register bob jarboa.test ci-bob-password
-sudo -u prosody prosody --config "$RUNTIME/prosody.cfg.lua" > ci/prosody.log 2>&1 &
+sudo cp "$RUNTIME/prosody.cfg.lua" /etc/prosody/prosody.cfg.lua
+sudo -u prosody prosodyctl register alice jarboa.test ci-alice-password
+sudo -u prosody prosodyctl register bob jarboa.test ci-bob-password
+sudo -u prosody prosody > ci/prosody.log 2>&1 &
 for attempt in {1..30}; do
   if (echo > /dev/tcp/127.0.0.1/5222) 2>/dev/null; then exit 0; fi
   sleep 1
