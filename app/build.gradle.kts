@@ -63,7 +63,7 @@ android {
         }
     }
 
-    testBuildType = "runtimeCheck"
+    testBuildType = if (providers.gradleProperty("RUNTIME_TEST").isPresent) "runtimeCheck" else "debug"
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
