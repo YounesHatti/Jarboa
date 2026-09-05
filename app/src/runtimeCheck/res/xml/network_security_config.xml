@@ -7,7 +7,8 @@
         </trust-anchors>
     </base-config>
     <domain-config cleartextTrafficPermitted="false">
-        <domain>jarboa.test</domain>
+        <domain includeSubdomains="false">jarboa.test</domain>
+        <domain includeSubdomains="false">wrong.test</domain>
         <trust-anchors>
             <certificates src="@raw/ci_ca" />
         </trust-anchors>
