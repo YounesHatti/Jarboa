@@ -28,6 +28,7 @@ android {
         versionName = providers.gradleProperty("VERSION_NAME").orNull ?: "0.2.0-beta.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        testProguardFiles("proguard-android-test-rules.pro")
     }
 
     signingConfigs {
