@@ -60,6 +60,7 @@ android {
             initWith(getByName("release"))
             applicationIdSuffix = ".runtimecheck"
             signingConfig = signingConfigs.getByName("debug")
+            proguardFile("proguard-runtime-check-rules.pro")
             matchingFallbacks += "release"
         }
     }
