@@ -10,3 +10,23 @@
 # Instrumentation tests share Jarboa's coroutine dependency with the target process. Keep the
 # target copy available to test-only runBlocking/Flow code after the app itself is optimized.
 -keep class kotlinx.coroutines.** { *; }
+
+# Instrumentation is compiled into a separate APK. Preserve the narrow Jarboa API that the test
+# calls across that APK boundary; otherwise R8 may legally change constructor or method signatures
+# in the optimized target APK (for example OmemoTrustStore(Context)), leaving the test APK with a
+# stale call site. The XMPP/OMEMO implementation and all Smack classes remain fully optimized.
+-keep class com.youneshatti.jarboa.data.security.OmemoTrustStore {
+    public <init>(android.content.Context);
+}
+
+-keep class com.youneshatti.jarboa.data.xmpp.SmackXmppClient {
+    public protected *;
+}
+
+-keep class com.youneshatti.jarboa.data.xmpp.XmppEvent** {
+    public protected *;
+}
+
+-keep class com.youneshatti.jarboa.domain.model.** {
+    public protected *;
+}
