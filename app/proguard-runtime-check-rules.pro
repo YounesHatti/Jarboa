@@ -6,3 +6,7 @@
 # Preserve the target copy for AndroidX Test, whose Kotlin entry points are not referenced by the
 # production application and would otherwise be removed before the runner starts.
 -keep class kotlin.** { *; }
+
+# Instrumentation tests share Jarboa's coroutine dependency with the target process. Keep the
+# target copy available to test-only runBlocking/Flow code after the app itself is optimized.
+-keep class kotlinx.coroutines.** { *; }
