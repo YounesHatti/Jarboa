@@ -1,8 +1,23 @@
-# Smack loads providers and Android initialization metadata by class name.
+# Smack loads core providers and Android initialization metadata by class name.
 -keep class org.jivesoftware.smack.** { *; }
--keep class org.jivesoftware.smackx.** { *; }
 -keep class org.jxmpp.** { *; }
 -keepattributes Signature,*Annotation*
+
+# Extension initializers and stanza providers are listed in Smack's metadata and instantiated by
+# class name. Preserve those entry points without retaining every optional smack-extensions feature
+# (notably OpenPGP and its desktop Bouncy Castle provider) in the Android APK.
+-keep class * implements org.jivesoftware.smack.initializer.SmackInitializer { *; }
+-keep class * extends org.jivesoftware.smack.provider.IQProvider { *; }
+-keep class * extends org.jivesoftware.smack.provider.ExtensionElementProvider { *; }
+
+# XmppElementUtil reads these public constants by their literal field names. Keep the fields while
+# still allowing R8 to optimize and remove extension implementations Jarboa never uses.
+-keepclassmembers class * implements org.jivesoftware.smack.packet.NamedElement {
+    public static final java.lang.String ELEMENT;
+}
+-keepclassmembers class * implements org.jivesoftware.smack.packet.FullyQualifiedElement {
+    public static final java.lang.String NAMESPACE;
+}
 
 # libsignal's Curve25519 facade constructs its provider by its original class name.
 # Without this rule R8 renames or removes the provider in release builds, so OMEMO
