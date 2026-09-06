@@ -665,12 +665,12 @@ internal fun omemoFailureDiagnosticCode(stage: OmemoFailureStage, error: Throwab
 }
 
 /**
- * Exposes only runtime type and symbol information needed to diagnose binary linkage failures.
+ * Exposes only runtime type information and, for linkage failures, the missing runtime symbol.
  * Arbitrary exception messages are never included: they can contain JIDs, server text, or paths.
  */
 internal fun omemoFailureDiagnosticReport(error: Throwable): String? {
     val causes = generateSequence(error) { it.cause }.take(MAX_DIAGNOSTIC_CAUSES).toList()
-    val linkage = causes.firstOrNull { it is LinkageError } as? LinkageError ?: return null
+    val linkage = causes.firstOrNull { it is LinkageError } as? LinkageError
     val causeTypes = causes.joinToString(" -> ") { it.javaClass.name }
     val symbol = when (linkage) {
         is NoClassDefFoundError,

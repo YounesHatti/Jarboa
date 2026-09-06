@@ -95,7 +95,10 @@ class OmemoFailureMessageTest {
     }
 
     @Test
-    fun `non linkage failures do not expose technical reports`() {
-        assertEquals(null, omemoFailureDiagnosticReport(IOException("private path")))
+    fun `non linkage failures expose only their safe type`() {
+        assertEquals(
+            "Failure types: java.io.IOException",
+            omemoFailureDiagnosticReport(IOException("private path")),
+        )
     }
 }

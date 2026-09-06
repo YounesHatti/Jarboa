@@ -7,8 +7,11 @@
 # class name. Preserve those entry points without retaining every optional smack-extensions feature
 # (notably OpenPGP and its desktop Bouncy Castle provider) in the Android APK.
 -keep class * implements org.jivesoftware.smack.initializer.SmackInitializer { *; }
--keep class * extends org.jivesoftware.smack.provider.IQProvider { *; }
+-keep class * extends org.jivesoftware.smack.provider.IqProvider { *; }
 -keep class * extends org.jivesoftware.smack.provider.ExtensionElementProvider { *; }
+
+# smack-omemo/omemo.xml loads this class by its literal name during Smack startup.
+-keep,allowoptimization class org.jivesoftware.smackx.omemo.OmemoManager
 
 # XmppElementUtil reads these public constants by their literal field names. Keep the fields while
 # still allowing R8 to optimize and remove extension implementations Jarboa never uses.
