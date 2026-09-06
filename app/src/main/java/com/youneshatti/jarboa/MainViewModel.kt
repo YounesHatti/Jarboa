@@ -195,8 +195,16 @@ class MainViewModel(
             mutableBusy.value = true
             mutableError.value = null
             runCatching { container.retryEncryption() }
+                .onSuccess { ready ->
+                    if (ready) {
+                        mutableSelectedConversation.value?.let(::refreshContactSecurity)
+                    } else {
+                        mutableError.value = omemoState.value.detail ?: "Encryption is not ready yet."
+                    }
+                }
                 .onFailure {
-                    mutableError.value = "Jarboa could not reconnect. Check the connection status and try again."
+                    mutableError.value = (connectionState.value as? XmppConnectionState.Failed)?.detail
+                        ?: omemoState.value.detail ?: "Jarboa could not retry encryption."
                 }
             mutableBusy.value = false
         }

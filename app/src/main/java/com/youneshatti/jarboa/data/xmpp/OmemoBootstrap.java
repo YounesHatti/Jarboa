@@ -50,7 +50,8 @@ public final class OmemoBootstrap {
     @SuppressWarnings({"rawtypes", "unchecked"})
     public static synchronized void purgeLocalDevices(BareJid localUser) {
         if (configuredStorageDirectory == null || !OmemoService.isServiceRegistered()) {
-            throw new IllegalStateException("Smack's OMEMO store has not been configured.");
+            // Setup failed before a cache was installed; callers still erase the on-disk directory.
+            return;
         }
         OmemoStore store = OmemoService.getInstance().getOmemoStoreBackend();
         for (Integer deviceId : new TreeSet<Integer>(store.localDeviceIdsOf(localUser))) {

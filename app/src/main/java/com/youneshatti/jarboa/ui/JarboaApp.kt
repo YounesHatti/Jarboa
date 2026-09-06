@@ -750,7 +750,7 @@ private fun SettingsScreen(
                         Text(if (busy) "Retrying…" else "Retry encryption")
                     }
                     Text(
-                        "Reconnects securely without erasing your account or messages.",
+                        "Retries securely without erasing your account or messages.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )

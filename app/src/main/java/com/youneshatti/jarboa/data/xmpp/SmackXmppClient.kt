@@ -37,6 +37,7 @@ import org.jivesoftware.smack.XMPPConnection
 import org.jivesoftware.smack.XMPPException
 import org.jivesoftware.smack.chat2.ChatManager
 import org.jivesoftware.smack.packet.Message
+import org.jivesoftware.smack.packet.Presence
 import org.jivesoftware.smack.packet.Stanza
 import org.jivesoftware.smack.packet.StanzaBuilder
 import org.jivesoftware.smack.roster.AbstractRosterListener
@@ -62,6 +63,7 @@ import org.jxmpp.jid.BareJid
 import org.jxmpp.jid.Jid
 import org.jxmpp.jid.impl.JidCreate
 import org.jxmpp.jid.parts.Resourcepart
+import java.io.File
 import java.io.IOException
 import java.net.UnknownHostException
 import java.security.NoSuchProviderException
@@ -71,6 +73,7 @@ import javax.net.ssl.SSLHandshakeException
 
 class SmackXmppClient(
     private val trustStore: OmemoTrustStore,
+    private val omemoStorageDirectory: File,
 ) : XmppClient {
     private val state = MutableStateFlow<XmppConnectionState>(XmppConnectionState.SignedOut)
     private val mutableOmemoState = MutableStateFlow(OmemoSessionState.Inactive)
@@ -105,7 +108,8 @@ class SmackXmppClient(
                         .setSecurityMode(ConnectionConfiguration.SecurityMode.required)
                         .setHostnameVerifier(HttpsURLConnection.getDefaultHostnameVerifier())
                         .setCompressionEnabled(false)
-                        .setSendPresence(true)
+                        // Request queued messages only after the OMEMO receive listener is ready.
+                        .setSendPresence(false)
                         .setConnectTimeout(CONNECT_TIMEOUT_MILLIS)
                     config.serverHost?.takeIf(String::isNotBlank)?.let { host ->
                         builder.setHost(host)
@@ -132,6 +136,7 @@ class SmackXmppClient(
                     // from Smack's login() and tears down an otherwise valid XMPP session. Attach
                     // OMEMO only after authentication so prepare/initialize failures remain isolated.
                     prepareOmemoManager(newConnection)?.let(::initializeOmemo)
+                    newConnection.sendStanza(Presence(Presence.Type.available))
                     Unit
                 } catch (error: Throwable) {
                     disconnectCurrent(resetOmemoState = false)
@@ -147,6 +152,14 @@ class SmackXmppClient(
         connectionMutex.withLock {
             state.value = XmppConnectionState.SignedOut
             disconnectCurrent()
+        }
+    }
+
+    override suspend fun retryEncryption(): Boolean = withContext(Dispatchers.IO) {
+        connectionMutex.withLock {
+            val active = requireConnection()
+            val manager = omemoManager ?: prepareOmemoManager(active)
+            manager != null && initializeOmemo(manager)
         }
     }
 
@@ -399,6 +412,7 @@ class SmackXmppClient(
     private fun addConnectionListener(activeConnection: XMPPTCPConnection) {
         activeConnection.addConnectionListener(object : AbstractConnectionListener() {
             override fun authenticated(connection: XMPPConnection, resumed: Boolean) {
+                if (this@SmackXmppClient.connection !== activeConnection) return
                 val previousState = state.value
                 val bound = connection.user?.asBareJid()?.toString() ?: return
                 state.value = XmppConnectionState.Connected(bound)
@@ -410,7 +424,7 @@ class SmackXmppClient(
                     roster?.let { activeRoster ->
                         clientScope.launch {
                             connectionMutex.withLock {
-                                if (connection === activeConnection && activeConnection.isAuthenticated) {
+                                if (this@SmackXmppClient.connection === activeConnection && activeConnection.isAuthenticated) {
                                     runCatching { refreshRoster(activeRoster, reload = !activeRoster.isLoaded) }
                                 }
                             }
@@ -421,12 +435,14 @@ class SmackXmppClient(
             }
 
             override fun connectionClosed() {
+                if (connection !== activeConnection) return
                 if (state.value !is XmppConnectionState.SignedOut) {
                     state.value = XmppConnectionState.Disconnected
                 }
             }
 
             override fun connectionClosedOnError(error: Exception) {
+                if (connection !== activeConnection) return
                 mutableOmemoState.value = OmemoSessionState(
                     status = OmemoSessionStatus.FAILED,
                     detail = "Encryption is paused until Jarboa reconnects.",
@@ -437,10 +453,12 @@ class SmackXmppClient(
         ReconnectionManager.getInstanceFor(activeConnection).addReconnectionListener(
             object : ReconnectionListener {
                 override fun reconnectingIn(seconds: Int) {
+                    if (connection !== activeConnection) return
                     state.value = XmppConnectionState.Reconnecting(seconds)
                 }
 
                 override fun reconnectionFailed(error: Exception) {
+                    if (connection !== activeConnection) return
                     state.value = error.toFailureState()
                 }
             },
@@ -452,6 +470,8 @@ class SmackXmppClient(
         ?: error("The XMPP connection is offline.")
 
     private fun prepareOmemoManager(activeConnection: XMPPTCPConnection): OmemoManager? = try {
+        // Crypto setup belongs to the protected OMEMO phase, not Application.onCreate or login.
+        OmemoBootstrap.initialize(omemoStorageDirectory)
         OmemoManager.getInstanceFor(activeConnection).also { manager ->
             manager.setTrustCallback(trustStore)
             manager.addOmemoMessageListener(omemoMessageListener)
@@ -538,6 +558,7 @@ class SmackXmppClient(
                 if (connection !== activeConnection || !activeConnection.isAuthenticated) return@withLock
                 val manager = omemoManager ?: prepareOmemoManager(activeConnection)
                 manager?.let(::initializeOmemo)
+                activeConnection.sendStanza(Presence(Presence.Type.available))
             }
         }
     }
@@ -558,6 +579,7 @@ class SmackXmppClient(
         mutableContacts.value = emptyList()
         if (resetOmemoState) mutableOmemoState.value = OmemoSessionState.Inactive
         runCatching { currentOmemoManager?.stopStanzaAndPEPListeners() }
+        current?.let { ReconnectionManager.getInstanceFor(it).disableAutomaticReconnection() }
         if (current?.isConnected == true) runCatching { current.disconnect() }
     }
 

@@ -19,6 +19,7 @@ interface XmppClient {
 
     suspend fun connect(config: AccountConfig, password: CharArray)
     suspend fun disconnect()
+    suspend fun retryEncryption(): Boolean
     suspend fun addContact(contactJid: String)
     suspend fun sendDirectMessage(recipientJid: String, body: String, stanzaId: String): OmemoSendResult
     suspend fun loadContactSecurity(recipientJid: String): OmemoContactSecurity

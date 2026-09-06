@@ -40,10 +40,6 @@ class AppContainer(application: Application) {
     private val omemoDirectory = File(application.noBackupFilesDir, "omemo")
     private val omemoTrustStore = OmemoTrustStore(application)
 
-    init {
-        OmemoBootstrap.initialize(omemoDirectory)
-    }
-
     private val database = Room.databaseBuilder(
         application,
         JarboaDatabase::class.java,
@@ -53,7 +49,7 @@ class AppContainer(application: Application) {
     val accountStore = SecureAccountStore(application)
     val settingsStore = SettingsStore(application)
     val messageRepository = MessageRepository(database)
-    val xmppClient = SmackXmppClient(omemoTrustStore)
+    val xmppClient = SmackXmppClient(omemoTrustStore, omemoDirectory)
     private val notifier = JarboaNotifier(application, settingsStore)
 
     init {
@@ -107,10 +103,12 @@ class AppContainer(application: Application) {
     }
 
     /**
-     * Creates a fresh authenticated XMPP connection and OMEMO manager without deleting the
-     * account, message history, trust decisions, or local encryption keys.
+     * Retry on the authenticated session, reconnecting only when the transport is offline.
      */
     suspend fun retryEncryption(): Boolean {
+        if (xmppClient.connectionState.value is XmppConnectionState.Connected) {
+            return xmppClient.retryEncryption()
+        }
         val stored = accountStore.load() ?: return false
         return try {
             xmppClient.connect(stored.config, stored.password)

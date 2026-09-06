@@ -6,6 +6,7 @@ import com.youneshatti.jarboa.data.security.OmemoTrustStore
 import com.youneshatti.jarboa.data.xmpp.SmackXmppClient
 import com.youneshatti.jarboa.data.xmpp.XmppEvent
 import com.youneshatti.jarboa.domain.model.AccountConfig
+import com.youneshatti.jarboa.domain.model.FailureReason
 import com.youneshatti.jarboa.domain.model.MessageEncryption
 import com.youneshatti.jarboa.domain.model.OmemoSessionStatus
 import com.youneshatti.jarboa.domain.model.OmemoTrustLevel
@@ -18,15 +19,53 @@ import kotlinx.coroutines.withTimeout
 import org.junit.Assert.*
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.io.File
 
 /** Executes the app's real XMPP client in an R8-optimized APK, against an isolated TLS server. */
 @RunWith(AndroidJUnit4::class)
 class OmemoRuntimeTest {
     @Test
+    fun cryptoStorageFailureKeepsLoginConnectedAndSendingBlocked() = runBlocking {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val invalidStore = File(context.noBackupFilesDir, "ci-not-a-directory")
+        invalidStore.writeText("test fixture")
+        val client = SmackXmppClient(OmemoTrustStore(context), invalidStore)
+        try {
+            client.connect(AccountConfig("alice@jarboa.test", "10.0.2.2", 5222), "ci-alice-password".toCharArray())
+            assertTrue(client.connectionState.value.toString(), client.connectionState.value is XmppConnectionState.Connected)
+            assertEquals(OmemoSessionStatus.FAILED, client.omemoState.value.status)
+            assertFalse(client.retryEncryption())
+            assertTrue(client.connectionState.value is XmppConnectionState.Connected)
+            assertTrue(runCatching { client.sendDirectMessage("bob@jarboa.test", "Must never be sent", "ci-blocked") }.isFailure)
+        } finally {
+            client.disconnect()
+            invalidStore.delete()
+        }
+    }
+
+    @Test
+    fun wrongPasswordAndWrongCertificateAreRejected() = runBlocking {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val client = SmackXmppClient(OmemoTrustStore(context), File(context.noBackupFilesDir, "omemo"))
+        try {
+            val password = "wrong-password".toCharArray()
+            assertTrue(runCatching { client.connect(AccountConfig("alice@jarboa.test", "10.0.2.2", 5222), password) }.isFailure)
+            assertEquals(FailureReason.AUTHENTICATION, (client.connectionState.value as XmppConnectionState.Failed).reason)
+            assertTrue(password.all { it == '\u0000' })
+            // The CA is trusted by the CI-only variant, but its certificate names jarboa.test.
+            assertTrue(runCatching { client.connect(AccountConfig("alice@wrong.test", "10.0.2.2", 5222), "unused".toCharArray()) }.isFailure)
+            assertEquals(FailureReason.TLS, (client.connectionState.value as XmppConnectionState.Failed).reason)
+        } finally {
+            client.disconnect()
+        }
+    }
+
+    @Test
     fun loginEncryptReceiveReconnectAndRejectUntrustedDevices() = runBlocking {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
-        val alice = SmackXmppClient(OmemoTrustStore(context))
-        val bob = SmackXmppClient(OmemoTrustStore(context))
+        val directory = File(context.noBackupFilesDir, "omemo")
+        val alice = SmackXmppClient(OmemoTrustStore(context), directory)
+        val bob = SmackXmppClient(OmemoTrustStore(context), directory)
         fun config(name: String) = AccountConfig("$name@jarboa.test", "10.0.2.2", 5222)
         try {
             alice.connect(config("alice"), "ci-alice-password".toCharArray())
@@ -51,7 +90,12 @@ class OmemoRuntimeTest {
             assertEquals(MessageEncryption.OMEMO_UNVERIFIED, aliceReceived.await().encryption)
 
             alice.disconnect()
+            bob.sendDirectMessage("alice@jarboa.test", "While Alice was offline", "ci-offline")
+            val offline = async {
+                withTimeout(30_000) { alice.events.filterIsInstance<XmppEvent.IncomingMessage>().first { it.stanzaId == "ci-offline" } }
+            }
             alice.connect(config("alice"), "ci-alice-password".toCharArray())
+            assertEquals("While Alice was offline", offline.await().body)
             assertEquals(alice.omemoState.value.toString(), OmemoSessionStatus.READY, alice.omemoState.value.status)
             assertEquals("Reconnecting must retain the identity", fingerprint, alice.omemoState.value.ownFingerprint)
             val afterReconnect = async {
@@ -59,6 +103,9 @@ class OmemoRuntimeTest {
             }
             alice.sendDirectMessage("bob@jarboa.test", "After reconnect", "ci-reconnect")
             assertEquals("After reconnect", afterReconnect.await().body)
+            assertTrue(alice.retryEncryption())
+            assertTrue(alice.connectionState.value is XmppConnectionState.Connected)
+            assertEquals(fingerprint, alice.omemoState.value.ownFingerprint)
 
             val devices = alice.loadContactSecurity("bob@jarboa.test")
             assertTrue(devices.toString(), devices.canSend)
