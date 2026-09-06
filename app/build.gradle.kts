@@ -119,6 +119,10 @@ dependencies {
         // Android supplies XmlPullParser; packaging Smack's desktop jars breaks R8.
         exclude(group = "xpp3", module = "xpp3_min")
         exclude(group = "xpp3", module = "xpp3")
+        // Smack's Android aggregate also pulls its optional OpenPGP stack. Jarboa
+        // uses OMEMO only; keeping OpenPGP packages a desktop Bouncy Castle
+        // provider whose reflection-loaded BKS implementation is stripped by R8.
+        exclude(group = "org.igniterealtime.smack", module = "smack-openpgp")
     }
     implementation("org.igniterealtime.smack:smack-tcp:$smackVersion")
     implementation("org.igniterealtime.smack:smack-im:$smackVersion")
