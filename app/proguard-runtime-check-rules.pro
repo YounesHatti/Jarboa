@@ -11,6 +11,9 @@
 # target copy available to test-only runBlocking/Flow code after the app itself is optimized.
 -keep class kotlinx.coroutines.** { *; }
 
+# The migration test opens the production Room database from the separate instrumentation APK.
+-keep class androidx.room.Room { *; }
+
 # Instrumentation is compiled into a separate APK. Preserve the narrow Jarboa API that the test
 # calls across that APK boundary; otherwise R8 may legally change constructor or method signatures
 # in the optimized target APK (for example OmemoTrustStore(Context)), leaving the test APK with a
