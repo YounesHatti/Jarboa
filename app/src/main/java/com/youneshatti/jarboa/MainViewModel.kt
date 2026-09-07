@@ -35,6 +35,7 @@ class MainViewModel(
     private val mutableBusy = MutableStateFlow(false)
     private val mutableError = MutableStateFlow<String?>(null)
     private val mutableSelectedConversation = MutableStateFlow<String?>(null)
+    private var foreground = false
     private val mutableContactSecurity = MutableStateFlow<OmemoContactSecurity?>(null)
     private val mutableNotificationPrivacy = MutableStateFlow(container.settingsStore.hideNotificationContent)
 
@@ -116,8 +117,28 @@ class MainViewModel(
             }
         }
         mutableSelectedConversation.value = normalized
-        markConversationRead(normalized)
-        prepareConversationContact(normalized)
+        updateVisibleConversation()
+        if (connectionState.value is XmppConnectionState.Connected) prepareConversationContact(normalized)
+    }
+
+    fun openNotificationConversation(jid: String) {
+        // The launcher Activity is exported. An external intent must not add a contact.
+        val normalized = (XmppAddressValidator.validate(jid) as? JidValidationResult.Valid)
+            ?.normalizedJid ?: return
+        viewModelScope.launch {
+            if (signedIn.value && container.messageRepository.hasConversation(normalized)) {
+                openConversation(normalized)
+            }
+        }
+    }
+
+    fun setForeground(value: Boolean) {
+        foreground = value
+        updateVisibleConversation()
+    }
+
+    private fun updateVisibleConversation() {
+        container.setVisibleConversation(if (foreground) mutableSelectedConversation.value else null)
     }
 
     fun markConversationRead(jid: String) {
@@ -126,6 +147,7 @@ class MainViewModel(
 
     fun closeConversation() {
         mutableSelectedConversation.value = null
+        updateVisibleConversation()
         mutableContactSecurity.value = null
     }
 
@@ -230,6 +252,7 @@ class MainViewModel(
     }
 
     fun signOut() {
+        container.setVisibleConversation(null)
         viewModelScope.launch {
             mutableBusy.value = true
             XmppConnectionService.stop(getApplication())

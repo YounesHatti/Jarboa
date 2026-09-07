@@ -41,6 +41,8 @@ class JarboaApplication : Application() {
 class AppContainer(application: Application) {
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val savedAccountConnectMutex = Mutex()
+    private val incomingMessageMutex = Mutex()
+    @Volatile private var visibleConversation: String? = null
     private val omemoDirectory = File(application.noBackupFilesDir, "omemo")
     private val omemoTrustStore = OmemoTrustStore(application)
 
@@ -61,7 +63,7 @@ class AppContainer(application: Application) {
         applicationScope.launch {
             xmppClient.events.collect { event ->
                 when (event) {
-                    is XmppEvent.IncomingMessage -> {
+                    is XmppEvent.IncomingMessage -> incomingMessageMutex.withLock {
                         val isNew = messageRepository.recordIncoming(
                             senderJid = event.senderJid,
                             stanzaId = event.stanzaId,
@@ -71,7 +73,12 @@ class AppContainer(application: Application) {
                             senderDeviceId = event.senderDeviceId,
                             senderFingerprint = event.senderFingerprint,
                         )
-                        if (isNew) notifier.notifyIncoming(event.senderJid, event.body)
+                        if (visibleConversation == event.senderJid) {
+                            messageRepository.markConversationRead(event.senderJid)
+                            notifier.cancelIncoming(event.senderJid)
+                        } else if (isNew) {
+                            notifier.notifyIncoming(event.senderJid, event.body)
+                        }
                     }
                     is XmppEvent.DeliveryReceipt -> messageRepository.markDelivered(event.stanzaId)
                 }
@@ -152,7 +159,13 @@ class AppContainer(application: Application) {
         }
     }
 
-    suspend fun markConversationRead(jid: String) {
+    fun setVisibleConversation(jid: String?) {
+        visibleConversation = jid
+        if (jid != null) applicationScope.launch { markConversationRead(jid) }
+    }
+
+    suspend fun markConversationRead(jid: String) = incomingMessageMutex.withLock {
+        if (visibleConversation != jid) return@withLock
         messageRepository.markConversationRead(jid)
         notifier.cancelIncoming(jid)
     }

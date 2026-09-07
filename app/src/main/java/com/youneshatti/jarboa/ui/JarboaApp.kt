@@ -542,6 +542,7 @@ private fun ConversationScreen(
             ) {
                 OutlinedTextField(
                     value = draft,
+                    textStyle = MaterialTheme.typography.bodyLarge.forChatContent(),
                     onValueChange = { draft = it.take(4096) },
                     modifier = Modifier.weight(1f),
                     enabled = security.canSend && connectionState is XmppConnectionState.Connected,
@@ -710,7 +711,11 @@ private fun MessageBubble(
             contentColor = if (message.outgoing) Color.Black else Color.White,
         ) {
             Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
-                Text(message.body)
+                Text(
+                    message.body,
+                    modifier = Modifier.fillMaxWidth(),
+                    style = MaterialTheme.typography.bodyLarge.forChatContent(),
+                )
                 Row(modifier = Modifier.align(Alignment.End), verticalAlignment = Alignment.CenterVertically) {
                     Text(message.encryption.label, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.width(7.dp))

@@ -38,7 +38,9 @@ jobs:
           arch: x86_64
           profile: pixel_7
           disable-animations: true
-          script: ./gradlew --no-daemon connectedRuntimeCheckAndroidTest -PRUNTIME_TEST=true --stacktrace
+          script: |
+            ./gradlew --no-daemon connectedRuntimeCheckAndroidTest -PRUNTIME_TEST=true --stacktrace
+            ./gradlew --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.youneshatti.jarboa.ChatPresentationTest --stacktrace
       - name: Verify server received encrypted payloads only
         run: |
           ! grep -q JARBOA_TEST_LEAK ci/prosody.log

@@ -21,6 +21,8 @@ class MessageRepository(private val database: JarboaDatabase) {
             entities.map(MessageEntity::toDomain)
         }
 
+    suspend fun hasConversation(jid: String): Boolean = database.conversationDao().find(jid) != null
+
     suspend fun prepareOutgoing(recipientJid: String, senderJid: String, body: String): DirectMessage {
         val timestamp = System.currentTimeMillis()
         val message = MessageEntity(
