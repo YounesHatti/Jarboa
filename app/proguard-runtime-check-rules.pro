@@ -11,15 +11,13 @@
 # target copy available to test-only runBlocking/Flow code after the app itself is optimized.
 -keep class kotlinx.coroutines.** { *; }
 
-# The migration test opens the production Room database from the separate instrumentation APK.
+# The migration test opens and queries the production Room database from a separate APK. Preserve
+# this complete test-facing boundary so R8 cannot inline Builder methods or remove Kotlin-generated
+# database/DAO bridges that are invisible while the target APK is optimized. Release builds do not
+# use this file, so production shrinking remains unchanged.
 -keep class androidx.room.Room { *; }
-
-# Its separate APK also reads MIGRATION_1_2 through Kotlin's generated Companion field. Keep
-# that test-facing bridge intact in the optimized CI target; release builds do not use this file.
--keepclassmembers class com.youneshatti.jarboa.data.local.JarboaDatabase {
-    public static ** Companion;
-}
--keep class com.youneshatti.jarboa.data.local.JarboaDatabase$Companion { *; }
+-keep class androidx.room.RoomDatabase$Builder { public *; }
+-keep class com.youneshatti.jarboa.data.local.** { *; }
 
 # Instrumentation is compiled into a separate APK. Preserve the narrow Jarboa API that the test
 # calls across that APK boundary; otherwise R8 may legally change constructor or method signatures
