@@ -5,6 +5,7 @@ import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import com.youneshatti.jarboa.service.XmppConnectionService
@@ -25,16 +26,21 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
-        }
-        if (applicationContainer.accountStore.hasAccount()) {
-            XmppConnectionService.start(this)
         }
         setContent {
             JarboaTheme {
                 JarboaApp(viewModel)
             }
+        }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        if (applicationContainer.accountStore.hasAccount()) {
+            XmppConnectionService.start(this)
         }
     }
 }

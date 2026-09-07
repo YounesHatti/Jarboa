@@ -23,6 +23,9 @@ interface MessageDao {
     @Query("UPDATE messages SET status = 'FAILED' WHERE id = :id AND status != 'DELIVERED'")
     suspend fun markFailed(id: String)
 
+    @Query("UPDATE messages SET status = 'PENDING' WHERE id = :id AND outgoing = 1 AND status = 'FAILED'")
+    suspend fun markPendingForRetry(id: String): Int
+
     @Query("UPDATE messages SET status = 'DELIVERED' WHERE stanzaId = :stanzaId")
     suspend fun markDelivered(stanzaId: String)
 }

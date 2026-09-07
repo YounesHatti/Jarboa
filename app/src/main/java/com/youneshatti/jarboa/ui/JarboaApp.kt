@@ -1,5 +1,6 @@
 package com.youneshatti.jarboa.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -9,11 +10,13 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -51,6 +54,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -58,6 +63,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -86,6 +92,7 @@ import com.youneshatti.jarboa.domain.validation.XmppAddressValidator
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import kotlinx.coroutines.flow.collectLatest
 
 @Composable
 fun JarboaApp(viewModel: MainViewModel) {
@@ -124,7 +131,10 @@ private fun SignInScreen(
     var serverPort by rememberSaveable { mutableStateOf("5222") }
 
     LazyColumn(
-        modifier = Modifier.fillMaxSize().padding(horizontal = 28.dp),
+        modifier = Modifier.fillMaxSize()
+            .navigationBarsPadding()
+            .imePadding()
+            .padding(horizontal = 28.dp),
         verticalArrangement = Arrangement.Center,
     ) {
         item {
@@ -238,13 +248,17 @@ private fun HomeScreen(viewModel: MainViewModel, busy: Boolean) {
     val connectionState by viewModel.connectionState.collectAsStateWithLifecycle()
     val conversations by viewModel.conversations.collectAsStateWithLifecycle()
     val contacts by viewModel.contacts.collectAsStateWithLifecycle()
+    val conversationStateHolder = rememberSaveableStateHolder()
 
     if (selectedConversation != null) {
-        ConversationScreen(
-            jid = selectedConversation!!,
-            viewModel = viewModel,
-            connectionState = connectionState,
-        )
+        val jid = selectedConversation!!
+        conversationStateHolder.SaveableStateProvider(jid) {
+            ConversationScreen(
+                jid = jid,
+                viewModel = viewModel,
+                connectionState = connectionState,
+            )
+        }
         return
     }
 
@@ -458,12 +472,55 @@ private fun ConversationScreen(
     val listState = rememberLazyListState()
     var draft by rememberSaveable(jid) { mutableStateOf("") }
     var showSecurityDetails by rememberSaveable(jid) { mutableStateOf(false) }
+    var keepAtLatest by rememberSaveable(jid) { mutableStateOf(true) }
+    var previousMessageCount by rememberSaveable(jid) { mutableStateOf(0) }
+    var automaticScroll by remember { mutableStateOf(false) }
     val security = contactSecurity?.takeIf { it.jid == jid } ?: OmemoContactSecurity.checking(jid)
-    LaunchedEffect(messages.size) {
-        if (messages.isNotEmpty()) listState.animateScrollToItem(messages.lastIndex)
+    val imeBottom = WindowInsets.ime.getBottom(LocalDensity.current)
+
+    BackHandler(onBack = viewModel::closeConversation)
+
+    LaunchedEffect(listState) {
+        snapshotFlow { listState.isScrollInProgress to listState.canScrollForward }
+            .collectLatest { (scrolling, canScrollForward) ->
+                if (scrolling && !automaticScroll) keepAtLatest = !canScrollForward
+            }
+    }
+
+    LaunchedEffect(messages.lastOrNull()?.id) {
+        val latest = messages.lastOrNull() ?: return@LaunchedEffect
+        val firstLoad = previousMessageCount == 0
+        val sentByMe = messages.size > previousMessageCount && latest.outgoing
+        if (firstLoad || keepAtLatest || sentByMe) {
+            automaticScroll = true
+            try {
+                if (firstLoad) {
+                    listState.scrollToItem(messages.lastIndex)
+                } else {
+                    listState.animateScrollToItem(messages.lastIndex)
+                }
+            } finally {
+                automaticScroll = false
+            }
+            keepAtLatest = true
+        }
+        previousMessageCount = messages.size
+        viewModel.markConversationRead(jid)
+    }
+
+    LaunchedEffect(imeBottom) {
+        if (imeBottom > 0 && keepAtLatest && messages.isNotEmpty()) {
+            automaticScroll = true
+            try {
+                listState.scrollToItem(messages.lastIndex)
+            } finally {
+                automaticScroll = false
+            }
+        }
     }
 
     Scaffold(
+        modifier = Modifier.imePadding(),
         topBar = {
             TopAppBar(
                 navigationIcon = { TextButton(onClick = viewModel::closeConversation) { Text("‹ Back") } },
@@ -480,7 +537,6 @@ private fun ConversationScreen(
             Row(
                 modifier = Modifier.fillMaxWidth()
                     .navigationBarsPadding()
-                    .imePadding()
                     .padding(12.dp),
                 verticalAlignment = Alignment.Bottom,
             ) {
@@ -528,7 +584,13 @@ private fun ConversationScreen(
                     contentPadding = androidx.compose.foundation.layout.PaddingValues(12.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    items(messages, key = DirectMessage::id) { message -> MessageBubble(message) }
+                    items(messages, key = DirectMessage::id) { message ->
+                        MessageBubble(
+                            message = message,
+                            canRetry = security.canSend && connectionState is XmppConnectionState.Connected,
+                            onRetry = viewModel::retryMessage,
+                        )
+                    }
                 }
             }
         }
@@ -632,7 +694,11 @@ private fun OmemoSecurityDialog(
 }
 
 @Composable
-private fun MessageBubble(message: DirectMessage) {
+private fun MessageBubble(
+    message: DirectMessage,
+    canRetry: Boolean,
+    onRetry: (DirectMessage) -> Unit,
+) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = if (message.outgoing) Arrangement.End else Arrangement.Start,
@@ -651,8 +717,20 @@ private fun MessageBubble(message: DirectMessage) {
                     Text(formatMessageTime(message.timestamp), style = MaterialTheme.typography.labelSmall)
                     if (message.outgoing) {
                         Spacer(Modifier.width(7.dp))
-                        Text(message.status.label, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                        Text(
+                            message.status.label,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = if (message.status == MessageStatus.FAILED) Color(0xFFB3261E) else Color.Unspecified,
+                        )
                     }
+                }
+                if (message.outgoing && message.status == MessageStatus.FAILED) {
+                    TextButton(
+                        onClick = { onRetry(message) },
+                        enabled = canRetry,
+                        modifier = Modifier.align(Alignment.End),
+                    ) { Text("Try again", color = Color(0xFFB3261E)) }
                 }
             }
         }
@@ -661,10 +739,10 @@ private fun MessageBubble(message: DirectMessage) {
 
 private val MessageStatus.label: String
     get() = when (this) {
-        MessageStatus.PENDING -> "QUEUED"
+        MessageStatus.PENDING -> "SENDING…"
         MessageStatus.SENT -> "SENT"
         MessageStatus.DELIVERED -> "DELIVERED"
-        MessageStatus.FAILED -> "FAILED"
+        MessageStatus.FAILED -> "NOT SENT"
     }
 
 private val MessageEncryption.label: String

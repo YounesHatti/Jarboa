@@ -8,6 +8,7 @@ import androidx.lifecycle.viewModelScope
 import com.youneshatti.jarboa.domain.model.AccountConfig
 import com.youneshatti.jarboa.domain.model.Conversation
 import com.youneshatti.jarboa.domain.model.DirectMessage
+import com.youneshatti.jarboa.domain.model.MessageStatus
 import com.youneshatti.jarboa.domain.model.OmemoContactSecurity
 import com.youneshatti.jarboa.domain.model.OmemoContactStatus
 import com.youneshatti.jarboa.domain.model.OmemoSessionState
@@ -115,8 +116,12 @@ class MainViewModel(
             }
         }
         mutableSelectedConversation.value = normalized
-        viewModelScope.launch { container.messageRepository.markConversationRead(normalized) }
+        markConversationRead(normalized)
         prepareConversationContact(normalized)
+    }
+
+    fun markConversationRead(jid: String) {
+        viewModelScope.launch { container.markConversationRead(jid) }
     }
 
     fun closeConversation() {
@@ -180,6 +185,16 @@ class MainViewModel(
             runCatching { container.sendMessage(recipientJid, message) }
                 .onFailure { failure ->
                     mutableError.value = failure.message ?: "The message could not be sent."
+                }
+        }
+    }
+
+    fun retryMessage(message: DirectMessage) {
+        if (!message.outgoing || message.status != MessageStatus.FAILED) return
+        viewModelScope.launch {
+            runCatching { container.retryMessage(message) }
+                .onFailure { failure ->
+                    mutableError.value = failure.message ?: "The message could not be sent again."
                 }
         }
     }
