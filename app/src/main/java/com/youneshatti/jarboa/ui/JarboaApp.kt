@@ -10,11 +10,13 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -61,6 +63,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -128,7 +131,10 @@ private fun SignInScreen(
     var serverPort by rememberSaveable { mutableStateOf("5222") }
 
     LazyColumn(
-        modifier = Modifier.fillMaxSize().padding(horizontal = 28.dp),
+        modifier = Modifier.fillMaxSize()
+            .navigationBarsPadding()
+            .imePadding()
+            .padding(horizontal = 28.dp),
         verticalArrangement = Arrangement.Center,
     ) {
         item {
@@ -470,6 +476,7 @@ private fun ConversationScreen(
     var previousMessageCount by rememberSaveable(jid) { mutableStateOf(0) }
     var automaticScroll by remember { mutableStateOf(false) }
     val security = contactSecurity?.takeIf { it.jid == jid } ?: OmemoContactSecurity.checking(jid)
+    val imeBottom = WindowInsets.ime.getBottom(LocalDensity.current)
 
     BackHandler(onBack = viewModel::closeConversation)
 
@@ -501,7 +508,19 @@ private fun ConversationScreen(
         viewModel.markConversationRead(jid)
     }
 
+    LaunchedEffect(imeBottom) {
+        if (imeBottom > 0 && keepAtLatest && messages.isNotEmpty()) {
+            automaticScroll = true
+            try {
+                listState.scrollToItem(messages.lastIndex)
+            } finally {
+                automaticScroll = false
+            }
+        }
+    }
+
     Scaffold(
+        modifier = Modifier.imePadding(),
         topBar = {
             TopAppBar(
                 navigationIcon = { TextButton(onClick = viewModel::closeConversation) { Text("‹ Back") } },
@@ -518,7 +537,6 @@ private fun ConversationScreen(
             Row(
                 modifier = Modifier.fillMaxWidth()
                     .navigationBarsPadding()
-                    .imePadding()
                     .padding(12.dp),
                 verticalAlignment = Alignment.Bottom,
             ) {
