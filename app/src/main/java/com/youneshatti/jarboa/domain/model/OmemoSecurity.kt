@@ -11,6 +11,8 @@ data class OmemoSessionState(
     val status: OmemoSessionStatus,
     val ownFingerprint: String? = null,
     val detail: String? = null,
+    val diagnosticCode: String? = null,
+    val diagnosticReport: String? = null,
 ) {
     companion object {
         val Inactive = OmemoSessionState(OmemoSessionStatus.INACTIVE)

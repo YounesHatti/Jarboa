@@ -722,6 +722,17 @@ private fun SettingsScreen(
                 )
                 Spacer(Modifier.height(6.dp))
                 omemoState.detail?.let { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                omemoState.diagnosticCode?.let { code ->
+                    Text("Diagnostic code: $code", style = MaterialTheme.typography.bodySmall)
+                }
+                omemoState.diagnosticReport?.let { report ->
+                    Text(
+                        "Technical report (safe to share)",
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    Text(report, style = MaterialTheme.typography.bodySmall)
+                }
                 omemoState.ownFingerprint?.let { fingerprint ->
                     Text("This device", fontWeight = FontWeight.Bold)
                     Text(fingerprint.blocksOfEight(), style = MaterialTheme.typography.bodySmall)
@@ -730,6 +741,20 @@ private fun SettingsScreen(
                     "Jarboa never falls back to plaintext for outgoing messages.",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                if (omemoState.status == OmemoSessionStatus.FAILED) {
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedButton(
+                        onClick = viewModel::retryEncryption,
+                        enabled = !busy && state is XmppConnectionState.Connected,
+                    ) {
+                        Text(if (busy) "Retrying…" else "Retry encryption")
+                    }
+                    Text(
+                        "Retries securely without erasing your account or messages.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
         }
         item {

@@ -28,6 +28,7 @@ android {
         versionName = providers.gradleProperty("VERSION_NAME").orNull ?: "0.2.0-beta.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        testProguardFiles("proguard-android-test-rules.pro")
     }
 
     signingConfigs {
@@ -55,7 +56,16 @@ android {
             )
             if (hasReleaseSigning) signingConfig = signingConfigs.getByName("release")
         }
+        create("runtimeCheck") {
+            initWith(getByName("release"))
+            applicationIdSuffix = ".runtimecheck"
+            signingConfig = signingConfigs.getByName("debug")
+            proguardFile("proguard-runtime-check-rules.pro")
+            matchingFallbacks += "release"
+        }
     }
+
+    testBuildType = if (providers.gradleProperty("RUNTIME_TEST").isPresent) "runtimeCheck" else "debug"
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -109,6 +119,10 @@ dependencies {
         // Android supplies XmlPullParser; packaging Smack's desktop jars breaks R8.
         exclude(group = "xpp3", module = "xpp3_min")
         exclude(group = "xpp3", module = "xpp3")
+        // Smack's Android aggregate also pulls its optional OpenPGP stack. Jarboa
+        // uses OMEMO only; keeping OpenPGP packages a desktop Bouncy Castle
+        // provider whose reflection-loaded BKS implementation is stripped by R8.
+        exclude(group = "org.igniterealtime.smack", module = "smack-openpgp")
     }
     implementation("org.igniterealtime.smack:smack-tcp:$smackVersion")
     implementation("org.igniterealtime.smack:smack-im:$smackVersion")
