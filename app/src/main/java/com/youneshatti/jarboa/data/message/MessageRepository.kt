@@ -99,6 +99,9 @@ class MessageRepository(private val database: JarboaDatabase) {
 
     suspend fun markFailed(id: String) = database.messageDao().markFailed(id)
 
+    suspend fun markPendingForRetry(id: String): Boolean =
+        database.messageDao().markPendingForRetry(id) == 1
+
     suspend fun markDelivered(stanzaId: String) {
         database.messageDao().markDelivered(stanzaId)
     }

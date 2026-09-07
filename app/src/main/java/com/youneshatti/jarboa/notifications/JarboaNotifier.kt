@@ -63,6 +63,10 @@ class JarboaNotifier(
         manager.notify(senderJid.hashCode() and Int.MAX_VALUE, notification)
     }
 
+    fun cancelIncoming(senderJid: String) {
+        manager.cancel(senderJid.hashCode() and Int.MAX_VALUE)
+    }
+
     fun cancelAll() = manager.cancelAll()
 
     private fun openAppIntent(): PendingIntent = PendingIntent.getActivity(

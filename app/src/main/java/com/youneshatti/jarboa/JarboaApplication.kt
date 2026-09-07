@@ -10,6 +10,7 @@ import com.youneshatti.jarboa.data.xmpp.OmemoBootstrap
 import com.youneshatti.jarboa.data.xmpp.SmackXmppClient
 import com.youneshatti.jarboa.data.xmpp.XmppEvent
 import com.youneshatti.jarboa.domain.model.AccountConfig
+import com.youneshatti.jarboa.domain.model.DirectMessage
 import com.youneshatti.jarboa.domain.model.OmemoSessionStatus
 import com.youneshatti.jarboa.domain.model.XmppConnectionState
 import com.youneshatti.jarboa.notifications.JarboaNotifier
@@ -19,6 +20,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.jivesoftware.smack.android.AndroidSmackInitializer
 import org.jxmpp.jid.impl.JidCreate
@@ -37,6 +40,7 @@ class JarboaApplication : Application() {
 
 class AppContainer(application: Application) {
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val savedAccountConnectMutex = Mutex()
     private val omemoDirectory = File(application.noBackupFilesDir, "omemo")
     private val omemoTrustStore = OmemoTrustStore(application)
 
@@ -91,10 +95,10 @@ class AppContainer(application: Application) {
         }
     }
 
-    suspend fun connectSavedAccount(): Boolean {
-        if (xmppClient.connectionState.value is XmppConnectionState.Connected) return true
-        val stored = accountStore.load() ?: return false
-        return try {
+    suspend fun connectSavedAccount(): Boolean = savedAccountConnectMutex.withLock {
+        if (xmppClient.connectionState.value is XmppConnectionState.Connected) return@withLock true
+        val stored = accountStore.load() ?: return@withLock false
+        try {
             xmppClient.connect(stored.config, stored.password)
             true
         } finally {
@@ -134,6 +138,23 @@ class AppContainer(application: Application) {
             messageRepository.markFailed(local.id)
             throw error
         }
+    }
+
+    suspend fun retryMessage(message: DirectMessage) {
+        require(message.outgoing) { "Only outgoing messages can be retried." }
+        if (!messageRepository.markPendingForRetry(message.id)) return
+        try {
+            val result = xmppClient.sendDirectMessage(message.conversationJid, message.body, message.id)
+            messageRepository.markSent(message.id, result.encryption)
+        } catch (error: Throwable) {
+            messageRepository.markFailed(message.id)
+            throw error
+        }
+    }
+
+    suspend fun markConversationRead(jid: String) {
+        messageRepository.markConversationRead(jid)
+        notifier.cancelIncoming(jid)
     }
 
     suspend fun signOut() = withContext(Dispatchers.IO) {

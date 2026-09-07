@@ -28,13 +28,17 @@ class MainActivity : ComponentActivity() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
-        if (applicationContainer.accountStore.hasAccount()) {
-            XmppConnectionService.start(this)
-        }
         setContent {
             JarboaTheme {
                 JarboaApp(viewModel)
             }
+        }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        if (applicationContainer.accountStore.hasAccount()) {
+            XmppConnectionService.start(this)
         }
     }
 }
