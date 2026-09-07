@@ -1,5 +1,5 @@
 -- Test fixtures only: never enabled on a user's server or in the Android application.
-module:hook("pre-message/bare", function(event)
+local function audit_message(event)
     local stanza = event.stanza
     local id = stanza.attr.id or ""
     if id:sub(1, 3) ~= "ci-" then return end
@@ -16,4 +16,9 @@ module:hook("pre-message/bare", function(event)
     else
         module:log("info", "JARBOA_TEST_ENCRYPTED %s", id)
     end
-end, 1000)
+end
+
+-- Smack may lock an established one-to-one chat to the contact's active resource after the first
+-- reply. Prosody consequently routes some outgoing stanzas as full JIDs and others as bare JIDs.
+module:hook("pre-message/bare", audit_message, 1000)
+module:hook("pre-message/full", audit_message, 1000)
