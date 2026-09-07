@@ -4,6 +4,8 @@ All notable Jarboa changes will be recorded here. The project follows semantic v
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-09-07
+
 ### Added
 
 - Synchronize the account's XMPP roster in the Contacts tab.
@@ -16,7 +18,10 @@ All notable Jarboa changes will be recorded here. The project follows semantic v
 ### Fixed
 
 - Attach Smack's OMEMO manager only after XMPP authentication so an encryption setup failure cannot abort login or disconnect an otherwise valid account session.
+- Preserve Smack's metadata-loaded stanza providers and OMEMO manager in optimized release builds.
+- Remove Smack's unused OpenPGP runtime and its incompatible desktop cryptography provider from Android builds.
 - Preserve libsignal's dynamically loaded Curve25519 provider in optimized release builds so OMEMO can generate its local identity.
+- Register encrypted-message listeners before announcing presence so queued encrypted messages are not missed.
 - Follow Smack's one-store OMEMO lifecycle instead of attempting to replace its cache after sign-out.
 - Treat the XEP-required public PEP-node check as an interoperability warning rather than disabling an otherwise initialized OMEMO session.
 - Initialize Smack's required Android networking support before the first XMPP connection.
@@ -91,7 +96,8 @@ All notable Jarboa changes will be recorded here. The project follows semantic v
 - Stable Android API 36 production baseline.
 - AndroidX Core and Lifecycle pinned to the stable-SDK-compatible release lines.
 
-[Unreleased]: https://github.com/YounesHatti/Jarboa/compare/v0.2.0-beta.1...HEAD
+[Unreleased]: https://github.com/YounesHatti/Jarboa/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/YounesHatti/Jarboa/compare/v0.2.10...v0.3.0
 [0.2.0-beta.1]: https://github.com/YounesHatti/Jarboa/compare/v0.1.4...v0.2.0-beta.1
 [0.1.4]: https://github.com/YounesHatti/Jarboa/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/YounesHatti/Jarboa/compare/v0.1.2...v0.1.3
