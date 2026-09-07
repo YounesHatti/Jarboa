@@ -67,7 +67,8 @@ class JarboaNotifier(
     fun cancelIncoming(senderJid: String) {
         manager.cancel(senderJid, MESSAGE_NOTIFICATION_ID)
         // Clear notifications posted by versions before tagged chat notifications.
-        manager.cancel(senderJid.hashCode() and Int.MAX_VALUE)
+        val legacyId = senderJid.hashCode() and Int.MAX_VALUE
+        if (legacyId != CONNECTION_NOTIFICATION_ID) manager.cancel(legacyId)
     }
 
     fun cancelAll() = manager.cancelAll()

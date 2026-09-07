@@ -121,6 +121,17 @@ class MainViewModel(
         if (connectionState.value is XmppConnectionState.Connected) prepareConversationContact(normalized)
     }
 
+    fun openNotificationConversation(jid: String) {
+        // The launcher Activity is exported. An external intent must not add a contact.
+        val normalized = (XmppAddressValidator.validate(jid) as? JidValidationResult.Valid)
+            ?.normalizedJid ?: return
+        viewModelScope.launch {
+            if (signedIn.value && container.messageRepository.hasConversation(normalized)) {
+                openConversation(normalized)
+            }
+        }
+    }
+
     fun setForeground(value: Boolean) {
         foreground = value
         updateVisibleConversation()

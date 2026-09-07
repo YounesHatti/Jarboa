@@ -56,7 +56,7 @@ class MainActivity : ComponentActivity() {
     private fun openNotification(intent: Intent) {
         val jid = intent.getStringExtra(JarboaNotifier.EXTRA_CONVERSATION) ?: return
         intent.removeExtra(JarboaNotifier.EXTRA_CONVERSATION)
-        if (applicationContainer.accountStore.hasAccount()) viewModel.openConversation(jid)
+        if (applicationContainer.accountStore.hasAccount()) viewModel.openNotificationConversation(jid)
     }
 
     override fun onResume() {
