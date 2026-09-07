@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Only the isolated CI application trusts the ephemeral test server certificate. -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="false">jarboa.test</domain>
+        <domain includeSubdomains="false">wrong.test</domain>
+        <trust-anchors>
+            <certificates src="@raw/ci_ca" />
+        </trust-anchors>
+    </domain-config>
+</network-security-config>
