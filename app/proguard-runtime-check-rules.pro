@@ -14,6 +14,13 @@
 # The migration test opens the production Room database from the separate instrumentation APK.
 -keep class androidx.room.Room { *; }
 
+# Its separate APK also reads MIGRATION_1_2 through Kotlin's generated Companion field. Keep
+# that test-facing bridge intact in the optimized CI target; release builds do not use this file.
+-keepclassmembers class com.youneshatti.jarboa.data.local.JarboaDatabase {
+    public static ** Companion;
+}
+-keep class com.youneshatti.jarboa.data.local.JarboaDatabase$Companion { *; }
+
 # Instrumentation is compiled into a separate APK. Preserve the narrow Jarboa API that the test
 # calls across that APK boundary; otherwise R8 may legally change constructor or method signatures
 # in the optimized target APK (for example OmemoTrustStore(Context)), leaving the test APK with a
