@@ -76,7 +76,12 @@ jobs:
           if [[ "$GITHUB_REF_NAME" == *-beta.* ]]; then
             RELEASE_FLAGS+=(--prerelease)
           fi
-          gh release create "$GITHUB_REF_NAME" Jarboa-*.apk Jarboa-*.apk.sha256 "${RELEASE_FLAGS[@]}"
+          if gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1; then
+            # Support releases created through GitHub without replacing existing assets.
+            gh release upload "$GITHUB_REF_NAME" Jarboa-*.apk Jarboa-*.apk.sha256
+          else
+            gh release create "$GITHUB_REF_NAME" Jarboa-*.apk Jarboa-*.apk.sha256 "${RELEASE_FLAGS[@]}"
+          fi
       - name: Remove signing material
         if: always()
         run: rm -f signing/release.jks
