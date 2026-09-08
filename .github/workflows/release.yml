@@ -72,11 +72,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          RELEASE_FLAGS=(--verify-tag --generate-notes --title "Jarboa $GITHUB_REF_NAME")
-          if [[ "$GITHUB_REF_NAME" == *-beta.* ]]; then
-            RELEASE_FLAGS+=(--prerelease)
-          fi
-          gh release create "$GITHUB_REF_NAME" Jarboa-*.apk Jarboa-*.apk.sha256 "${RELEASE_FLAGS[@]}"
+          gh release upload "$GITHUB_REF_NAME" Jarboa-*.apk Jarboa-*.apk.sha256 --clobber
+          gh release edit "$GITHUB_REF_NAME" --title "Jarboa $GITHUB_REF_NAME" --latest
       - name: Remove signing material
         if: always()
         run: rm -f signing/release.jks
