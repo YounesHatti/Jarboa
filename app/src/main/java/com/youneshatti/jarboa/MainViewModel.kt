@@ -10,6 +10,7 @@ import com.youneshatti.jarboa.domain.model.Conversation
 import com.youneshatti.jarboa.domain.model.DirectMessage
 import com.youneshatti.jarboa.domain.model.MessageStatus
 import com.youneshatti.jarboa.domain.model.OmemoContactSecurity
+import com.youneshatti.jarboa.domain.model.OmemoContactStatus
 import com.youneshatti.jarboa.domain.model.OmemoSessionState
 import com.youneshatti.jarboa.domain.model.OmemoSessionStatus
 import com.youneshatti.jarboa.domain.model.OmemoTrustLevel
@@ -24,6 +25,9 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -60,12 +64,11 @@ class MainViewModel(
         viewModelScope.launch {
             observeContactSecurity(
                 requests = combine(
-                    mutableSelectedConversation, foreground, connectionState, omemoState, contactSecurityRefresh,
-                ) { jid, visible, connection, omemo, refresh ->
+                    mutableSelectedConversation, foreground, connectionState, contactSecurityRefresh,
+                ) { jid, visible, connection, refresh ->
                     if (jid == null || !visible) null else ContactSecurityRequest(
                         jid = jid,
-                        ready = connection is XmppConnectionState.Connected &&
-                            omemo.status == OmemoSessionStatus.READY,
+                        ready = connection is XmppConnectionState.Connected,
                         refresh = refresh,
                     )
                 },
@@ -81,6 +84,15 @@ class MainViewModel(
                 load = container.xmppClient::loadContactSecurity,
                 publish = { mutableContactSecurity.value = it },
             )
+        }
+        viewModelScope.launch {
+            omemoState.map { it.status }.distinctUntilChanged().collect { status ->
+                if (status == OmemoSessionStatus.READY &&
+                    mutableContactSecurity.value?.status == OmemoContactStatus.UNAVAILABLE
+                ) {
+                    mutableSelectedConversation.value?.let(::refreshContactSecurity)
+                }
+            }
         }
     }
 
