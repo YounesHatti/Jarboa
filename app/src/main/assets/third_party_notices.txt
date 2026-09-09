@@ -1,6 +1,6 @@
 Jarboa includes AndroidX, Jetpack Compose, Kotlin coroutines, Room, JXMPP, MiniDNS, and Smack components. Their licenses are shipped with their corresponding artifacts. Source and the resolved dependency inventory are available at https://github.com/YounesHatti/Jarboa.
 
-OkHttp 4.12.0 and Okio
+OkHttp 5.5.0 and Okio
 Copyright Square, Inc. Licensed under the Apache License 2.0.
 https://square.github.io/okhttp/ and https://square.github.io/okio/
 

@@ -116,7 +116,7 @@ class MessageRepository(private val database: JarboaDatabase) {
 private fun ConversationEntity.toDomain() = Conversation(
     jid = jid,
     displayName = displayName,
-    latestPreview = latestPreview,
+    latestPreview = com.youneshatti.jarboa.data.attachment.attachmentPreview(latestPreview),
     latestTimestamp = latestTimestamp,
     unreadCount = unreadCount,
 )

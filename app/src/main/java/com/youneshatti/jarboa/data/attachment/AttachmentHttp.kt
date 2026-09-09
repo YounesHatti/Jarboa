@@ -14,6 +14,7 @@ import java.io.File
 import java.io.IOException
 import java.net.InetAddress
 import java.net.UnknownHostException
+import java.net.Proxy
 import java.util.concurrent.TimeUnit
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
@@ -45,6 +46,7 @@ class AttachmentHttp internal constructor(
             }
         })
         .followRedirects(false).followSslRedirects(false)
+        .proxy(Proxy.NO_PROXY)
         .connectTimeout(20, TimeUnit.SECONDS).readTimeout(30, TimeUnit.SECONDS)
         .writeTimeout(30, TimeUnit.SECONDS).callTimeout(5, TimeUnit.MINUTES)
         .build(),

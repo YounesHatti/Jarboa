@@ -98,6 +98,7 @@ dependencies {
     val lifecycleVersion = "2.10.0"
     val smackVersion = "4.4.8"
     val roomVersion = "2.8.4"
+    val okhttpVersion = "5.5.0"
 
     implementation(composeBom)
     androidTestImplementation(composeBom)
@@ -128,19 +129,19 @@ dependencies {
     implementation("org.igniterealtime.smack:smack-im:$smackVersion")
     implementation("org.igniterealtime.smack:smack-extensions:$smackVersion")
     implementation("org.igniterealtime.smack:smack-experimental:$smackVersion")
-    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("com.squareup.okhttp3:okhttp:$okhttpVersion")
     implementation("org.igniterealtime.smack:smack-omemo-signal:$smackVersion")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 
     testImplementation("junit:junit:4.13.2")
-    testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
-    testImplementation("com.squareup.okhttp3:okhttp-tls:4.12.0")
+    testImplementation("com.squareup.okhttp3:mockwebserver:$okhttpVersion")
+    testImplementation("com.squareup.okhttp3:okhttp-tls:$okhttpVersion")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.11.0")
     androidTestImplementation("androidx.test.ext:junit:1.3.0")
-    androidTestImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
-    androidTestImplementation("com.squareup.okhttp3:okhttp-tls:4.12.0")
+    androidTestImplementation("com.squareup.okhttp3:mockwebserver:$okhttpVersion")
+    androidTestImplementation("com.squareup.okhttp3:okhttp-tls:$okhttpVersion")
     androidTestImplementation("androidx.test:runner:1.7.0")
     androidTestImplementation("androidx.room:room-testing:$roomVersion")
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
