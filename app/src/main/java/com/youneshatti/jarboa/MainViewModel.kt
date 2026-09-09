@@ -1,6 +1,15 @@
 package com.youneshatti.jarboa
 
 import android.app.Application
+import android.net.Uri
+import com.youneshatti.jarboa.data.attachment.SelectedAttachment
+import com.youneshatti.jarboa.data.attachment.EncryptedAttachment
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import java.io.File
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
@@ -44,6 +53,12 @@ class MainViewModel(
     private val contactSecurityRefresh = MutableStateFlow(0L)
     private val mutableContactSecurity = MutableStateFlow<OmemoContactSecurity?>(null)
     private val mutableNotificationPrivacy = MutableStateFlow(container.settingsStore.hideNotificationContent)
+    private val mutableAttachmentDraft = MutableStateFlow<AttachmentDraft?>(null)
+    private val mutableTransfers = MutableStateFlow<Map<String, AttachmentTransfer>>(emptyMap())
+    private var attachmentJob: Job? = null
+    private val downloadJobs = mutableMapOf<String, Job>()
+    val attachmentDraft = mutableAttachmentDraft.asStateFlow()
+    val transfers = mutableTransfers.asStateFlow()
 
     val signedIn: StateFlow<Boolean> = mutableSignedIn.asStateFlow()
     val busy: StateFlow<Boolean> = mutableBusy.asStateFlow()
@@ -223,6 +238,96 @@ class MainViewModel(
         mutableNotificationPrivacy.value = hidden
     }
 
+    fun selectAttachment(jid: String, uri: Uri, photo: Boolean) {
+        if (attachmentJob?.isActive == true || mutableBusy.value || !signedIn.value) return
+        attachmentJob = viewModelScope.launch {
+            mutableAttachmentDraft.value?.selected?.file?.let { withContext(Dispatchers.IO) { it.delete() } }
+            mutableAttachmentDraft.value = AttachmentDraft(jid, status = "Preparing attachment", working = true)
+            try {
+                val selected = container.attachmentStore.select(uri, photo)
+                mutableAttachmentDraft.value = AttachmentDraft(jid, selected = selected)
+            } catch (cancelled: CancellationException) { throw cancelled
+            } catch (_: Exception) {
+                mutableAttachmentDraft.value = null
+                mutableError.value = "This attachment could not be prepared. Choose a readable file or photo up to 25 MB."
+            }
+        }
+    }
+
+    fun sendAttachment() {
+        val draft = mutableAttachmentDraft.value ?: return
+        val selected = draft.selected ?: return
+        if (attachmentJob?.isActive == true || mutableBusy.value) return
+        attachmentJob = viewModelScope.launch {
+            mutableAttachmentDraft.value = draft.copy(working = true, status = "Checking encryption")
+            try {
+                check(container.xmppClient.loadContactSecurity(draft.jid).canSend)
+                val body = container.attachmentStore.upload(selected, container.xmppClient::requestUploadSlot) { status, percent ->
+                    mutableAttachmentDraft.update { it?.copy(status = status, percent = percent) }
+                }
+                // The ordinary OMEMO send path checks device trust again after the upload.
+                // Once queued, retries use the existing message rather than uploading a second copy.
+                try { container.sendMessage(draft.jid, body) }
+                finally {
+                    withContext(kotlinx.coroutines.NonCancellable + Dispatchers.IO) { selected.file.delete() }
+                    mutableAttachmentDraft.value = null
+                }
+            } catch (cancelled: CancellationException) { throw cancelled
+            } catch (_: Exception) {
+                mutableAttachmentDraft.update { it?.copy(working = false, status = "Could not send. Check encryption and your server's upload limit, then retry.", percent = null) }
+                if (mutableAttachmentDraft.value == null) mutableError.value = "The attachment was uploaded, but its message could not be sent. Use Try again on the message."
+            }
+        }
+    }
+
+    fun discardAttachment() {
+        viewModelScope.launch {
+            attachmentJob?.cancelAndJoin()
+            mutableAttachmentDraft.value?.selected?.file?.let { withContext(Dispatchers.IO) { it.delete() } }
+            mutableAttachmentDraft.value = null
+        }
+    }
+
+    fun cachedAttachment(body: String): File? = container.attachmentStore.cached(body)
+
+    fun downloadAttachment(message: DirectMessage) {
+        if (downloadJobs[message.id]?.isActive == true || mutableBusy.value || !signedIn.value) return
+        if (message.encryption !in setOf(
+                com.youneshatti.jarboa.domain.model.MessageEncryption.OMEMO_UNVERIFIED,
+                com.youneshatti.jarboa.domain.model.MessageEncryption.OMEMO_VERIFIED,
+            ) || EncryptedAttachment.parse(message.body) == null) return
+        downloadJobs[message.id] = viewModelScope.launch {
+            mutableTransfers.update { it + (message.id to AttachmentTransfer("Waiting", working = true)) }
+            try {
+                container.attachmentStore.download(message.body) { status, percent ->
+                    mutableTransfers.update { it + (message.id to AttachmentTransfer(status, percent, true)) }
+                }
+                mutableTransfers.update { it + (message.id to AttachmentTransfer("Downloaded")) }
+            } catch (cancelled: CancellationException) { throw cancelled
+            } catch (_: Exception) {
+                mutableTransfers.update { it + (message.id to AttachmentTransfer("Download failed or encryption could not be verified. Tap to retry.")) }
+            }
+        }
+    }
+
+    fun saveAttachment(body: String, uri: Uri) {
+        if (mutableBusy.value || !signedIn.value) return
+        // Track exports alongside downloads so sign-out waits before erasing private files.
+        val id = "save:$uri"
+        downloadJobs[id] = viewModelScope.launch {
+            try { container.attachmentStore.saveCopy(body, uri) }
+            catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: Exception) { mutableError.value = "The file could not be saved. Download it again and choose another destination." }
+        }
+    }
+
+    fun cancelDownload(id: String) {
+        viewModelScope.launch {
+            downloadJobs[id]?.cancelAndJoin()
+            mutableTransfers.update { it + (id to AttachmentTransfer("Download cancelled.")) }
+        }
+    }
+
     fun retryEncryption() {
         if (mutableBusy.value) return
         viewModelScope.launch {
@@ -252,6 +357,11 @@ class MainViewModel(
         container.setVisibleConversation(null)
         viewModelScope.launch {
             mutableBusy.value = true
+            attachmentJob?.cancelAndJoin()
+            downloadJobs.values.toList().forEach { it.cancelAndJoin() }
+            downloadJobs.clear()
+            mutableAttachmentDraft.value = null
+            mutableTransfers.value = emptyMap()
             XmppConnectionService.stop(getApplication())
             runCatching { container.signOut() }
             mutableSelectedConversation.value = null
@@ -272,6 +382,16 @@ class MainViewModel(
         }
     }
 }
+
+data class AttachmentDraft(
+    val jid: String,
+    val selected: SelectedAttachment? = null,
+    val status: String? = null,
+    val percent: Int? = null,
+    val working: Boolean = false,
+)
+
+data class AttachmentTransfer(val status: String, val percent: Int? = null, val working: Boolean = false)
 
 internal fun signInFailureMessage(connectionState: XmppConnectionState): String =
     (connectionState as? XmppConnectionState.Failed)?.detail

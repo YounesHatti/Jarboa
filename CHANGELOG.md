@@ -4,6 +4,13 @@ All notable Jarboa changes will be recorded here. The project follows semantic v
 
 ## [Unreleased]
 
+### Added
+
+- Encrypted image and file uploads with Android pickers, send confirmation, progress, and retries.
+- Tap-to-download attachments, authenticated private image previews, and explicit Save a copy.
+- Photo resizing and metadata removal, a 25 MiB transfer limit, and bounded private attachment caching.
+- Android regression coverage for upload slots, encrypted media references, HTTPS transfers and tamper rejection.
+
 ## [0.3.0] - 2026-09-07
 
 ### Added

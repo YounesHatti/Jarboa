@@ -55,6 +55,7 @@ class AppContainer(application: Application) {
     val accountStore = SecureAccountStore(application)
     val settingsStore = SettingsStore(application)
     val messageRepository = MessageRepository(database)
+    val attachmentStore = com.youneshatti.jarboa.data.attachment.AttachmentStore(application)
     val xmppClient = SmackXmppClient(omemoTrustStore, omemoDirectory)
     private val notifier = JarboaNotifier(application, settingsStore)
 
@@ -77,7 +78,7 @@ class AppContainer(application: Application) {
                             messageRepository.markConversationRead(event.senderJid)
                             notifier.cancelIncoming(event.senderJid)
                         } else if (isNew) {
-                            notifier.notifyIncoming(event.senderJid, event.body)
+                            notifier.notifyIncoming(event.senderJid, com.youneshatti.jarboa.data.attachment.attachmentPreview(event.body))
                         }
                     }
                     is XmppEvent.DeliveryReceipt -> messageRepository.markDelivered(event.stanzaId)
@@ -176,6 +177,7 @@ class AppContainer(application: Application) {
         account?.let { OmemoBootstrap.purgeLocalDevices(JidCreate.entityBareFrom(it.jid)) }
         accountStore.clear()
         database.clearAllTables()
+        attachmentStore.clear()
         omemoTrustStore.clear()
         check(omemoDirectory.deleteRecursively() || !omemoDirectory.exists()) {
             "Jarboa could not erase its local OMEMO keys."

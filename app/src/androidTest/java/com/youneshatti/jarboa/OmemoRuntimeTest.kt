@@ -89,6 +89,19 @@ class OmemoRuntimeTest {
             assertEquals("Encrypted reply from Bob", aliceReceived.await().body)
             assertEquals(MessageEncryption.OMEMO_UNVERIFIED, aliceReceived.await().encryption)
 
+            // Exercise Smack's real upload discovery and slot parser after R8 optimization.
+            val slot = alice.requestUploadSlot("ci-file.jpg", 1234)
+            assertTrue(slot.putUrl.startsWith("https://"))
+            assertTrue(slot.getUrl.startsWith("https://"))
+            val attachment = com.youneshatti.jarboa.data.attachment.EncryptedAttachment.create(slot.getUrl)
+            val mediaReceived = async {
+                withTimeout(30_000) { bob.events.filterIsInstance<XmppEvent.IncomingMessage>().first { it.stanzaId == "ci-attachment" } }
+            }
+            alice.sendDirectMessage("bob@jarboa.test", attachment.body, "ci-attachment")
+            val media = mediaReceived.await()
+            assertEquals(attachment.body, media.body)
+            assertEquals(MessageEncryption.OMEMO_UNVERIFIED, media.encryption)
+
             alice.disconnect()
             bob.sendDirectMessage("alice@jarboa.test", "While Alice was offline", "ci-offline")
             val offline = async {

@@ -3,14 +3,15 @@
 Jarboa is a small, privacy-focused XMPP messenger for Android and GrapheneOS. It is built in Kotlin with Jetpack Compose, Room, Android Keystore, and Smack, with no dependency on Google Play services.
 
 > [!WARNING]
-> Jarboa is in early beta. Version 0.2.0-beta.1 adds OMEMO, but it has not received an independent security audit or broad interoperability testing. Treat the beta as test software rather than a high-risk communications tool.
+> Jarboa is still in development and has not received an independent security audit or broad interoperability testing. Treat it as test software rather than a high-risk communications tool.
 
-## Current milestone: 0.2.0 beta
+## Current features
 
 - XMPP sign-in with an optional host and port override
 - Mandatory TLS with platform certificate and hostname validation
 - Direct one-to-one messages and delivery receipts
 - OMEMO-encrypted outgoing direct messages with no plaintext fallback
+- Encrypted photos and files up to 25 MiB (subject to the server's upload limit), with explicit downloads and private image previews
 - Persistent device keys, automatic signed-prekey rotation, and fingerprint verification
 - Explicit first-seen, verified, distrusted, and changed-key states
 - Visible warnings for incoming plaintext and legacy 0.1.x history
@@ -22,7 +23,11 @@ Jarboa is a small, privacy-focused XMPP messenger for Android and GrapheneOS. It
 - Server-synchronized XMPP contacts with safe mutual presence requests
 - Android 9 (API 28) and later; compile/target SDK 36
 
-Encrypted attachments, groups, calls, multi-account support, and carbon-copy history synchronization are not part of this beta.
+Groups, calls, multi-account support, and carbon-copy history synchronization are not implemented.
+
+Use **Photo** to resize images and strip location metadata, or **File** to preserve the original bytes.
+Files stay in Jarboa until you choose **Save a copy**. Uploads use random filenames, so recipients see
+a generic attachment filename. See [encrypted attachment behavior and limitations](docs/ENCRYPTED-ATTACHMENTS.md).
 
 ## Install and updates
 

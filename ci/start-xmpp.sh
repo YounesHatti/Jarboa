@@ -27,6 +27,8 @@ c2s_require_encryption = true
 ssl = { key = "$RUNTIME/server.key"; certificate = "$RUNTIME/server.crt"; }
 VirtualHost "jarboa.test"
 VirtualHost "wrong.test"
+Component "upload.jarboa.test" "http_file_share"
+http_file_share_size_limit = 26214416
 EOF
 sudo chown -R prosody:prosody "$RUNTIME"
 sudo cp "$RUNTIME/prosody.cfg.lua" /etc/prosody/prosody.cfg.lua

@@ -191,6 +191,18 @@ class SmackXmppClient(
         }
     }
 
+    suspend fun requestUploadSlot(filename: String, size: Long): com.youneshatti.jarboa.data.attachment.UploadSlot =
+        withContext(Dispatchers.IO) {
+            connectionMutex.withLock {
+                val upload = org.jivesoftware.smackx.httpfileupload.HttpFileUploadManager.getInstanceFor(requireConnection())
+                check(upload.discoverUploadService()) { "Your XMPP server does not offer file uploads." }
+                val slot = upload.requestSlot(filename, size, "application/octet-stream")
+                com.youneshatti.jarboa.data.attachment.UploadSlot(
+                    slot.putUrl.toString(), slot.getUrl.toString(), slot.headers,
+                )
+            }
+        }
+
     override suspend fun sendDirectMessage(
         recipientJid: String,
         body: String,

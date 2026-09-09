@@ -23,6 +23,8 @@ jobs:
           distribution: temurin
           java-version: "17"
       - uses: android-actions/setup-android@v4
+      - name: Install Android SDK platform
+        run: sdkmanager "platforms;android-36"
       - uses: gradle/actions/setup-gradle@v6
       - name: Start isolated TLS XMPP server
         run: bash ci/start-xmpp.sh
@@ -44,7 +46,7 @@ jobs:
       - name: Verify server received encrypted payloads only
         run: |
           ! grep -q JARBOA_TEST_LEAK ci/prosody.log
-          for id in ci-forward ci-reply ci-offline ci-reconnect; do
+          for id in ci-forward ci-reply ci-offline ci-reconnect ci-attachment; do
             grep -q "JARBOA_TEST_ENCRYPTED $id" ci/prosody.log
           done
       - uses: actions/upload-artifact@v7
