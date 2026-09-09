@@ -321,6 +321,13 @@ class MainViewModel(
         }
     }
 
+    fun cancelDownload(id: String) {
+        viewModelScope.launch {
+            downloadJobs[id]?.cancelAndJoin()
+            mutableTransfers.update { it + (id to AttachmentTransfer("Download cancelled.")) }
+        }
+    }
+
     fun retryEncryption() {
         if (mutableBusy.value) return
         viewModelScope.launch {

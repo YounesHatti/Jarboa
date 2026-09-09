@@ -72,6 +72,9 @@ internal fun AttachmentDraftCard(jid: String, viewModel: MainViewModel, canSend:
             if (draft.jid != jid) Text("Attachment to ${draft.jid}", style = MaterialTheme.typography.labelMedium)
             draft.selected?.let { selected ->
                 Text(selected.name, maxLines = 2, style = MaterialTheme.typography.bodyMedium.forChatContent())
+                if (selected.extension in setOf("jpg", "jpeg", "png", "webp", "gif", "heic", "heif", "avif")) {
+                    PrivateImage(selected.file, Modifier.fillMaxWidth().heightIn(max = 100.dp))
+                }
                 Text("${(selected.size / 1024).coerceAtLeast(1)} KB", style = MaterialTheme.typography.labelSmall)
             }
             draft.status?.let { Text(it, style = MaterialTheme.typography.labelMedium) }
@@ -111,7 +114,10 @@ internal fun AttachmentContent(message: DirectMessage, viewModel: MainViewModel)
         TextButton(onClick = { save.launch(attachment.fileName) }) { Text("Save a copy") }
     } else {
         Text(transfer?.status ?: "Tap to download and verify", style = MaterialTheme.typography.bodySmall)
-        if (transfer?.working == true) TransferProgress(transfer.percent)
+        if (transfer?.working == true) {
+            TransferProgress(transfer.percent)
+            TextButton(onClick = { viewModel.cancelDownload(message.id) }) { Text("Cancel download") }
+        }
         else TextButton(onClick = { viewModel.downloadAttachment(message) }) {
             Text(if (transfer == null) "Download" else "Retry download")
         }
