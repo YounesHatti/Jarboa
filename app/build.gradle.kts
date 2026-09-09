@@ -18,7 +18,7 @@ val hasReleaseSigning = listOf(
 
 android {
     namespace = "com.youneshatti.jarboa"
-    compileSdk = 37
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.youneshatti.jarboa"
@@ -98,7 +98,8 @@ dependencies {
     val lifecycleVersion = "2.10.0"
     val smackVersion = "4.4.8"
     val roomVersion = "2.8.4"
-    val okhttpVersion = "5.5.0"
+    // 5.4 supports our stable SDK; 5.5 requires API 37, unavailable on CI.
+    val okhttpVersion = "5.4.0"
 
     implementation(composeBom)
     androidTestImplementation(composeBom)

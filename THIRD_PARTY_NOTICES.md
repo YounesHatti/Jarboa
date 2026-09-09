@@ -1,6 +1,6 @@
 # Third-party notices
 
-Jarboa uses OkHttp 5.5.0 and Okio, copyright Square, Inc., under the Apache License 2.0: https://square.github.io/okhttp/ and https://square.github.io/okio/.
+Jarboa uses OkHttp 5.4.0 and Okio, copyright Square, Inc., under the Apache License 2.0: https://square.github.io/okhttp/ and https://square.github.io/okio/.
 
 Jarboa includes AndroidX, Jetpack Compose, Kotlin coroutines, Room, JXMPP, MiniDNS, and Smack components. These components are distributed under the Apache License 2.0 or another license shipped with their corresponding artifact. Dependency versions are pinned in `app/build.gradle.kts`; Gradle's resolved dependency graph is the authoritative inventory for a build.
 
