@@ -54,8 +54,11 @@ class EncryptedAttachmentTest {
         for (host in listOf("127.0.0.1", "0.0.0.0", "10.0.2.2", "192.168.1.1", "172.16.0.1", "169.254.169.254",
             "100.64.0.1", "224.0.0.1", "::1", "fc00::1", "fe80::1", "::ffff:127.0.0.1")) {
             assertFalse(host, isPublicAddress(InetAddress.getByName(host)))
+            assertThrows(java.net.UnknownHostException::class.java) { checkLiteralAddress(host) }
         }
         assertTrue(isPublicAddress(InetAddress.getByName("1.1.1.1")))
+        checkLiteralAddress("1.1.1.1")
+        checkLiteralAddress("example.org") // Names are checked by the DNS policy, not resolved here.
         assertTrue(isPublicAddress(InetAddress.getByName("2606:4700:4700::1111")))
     }
 }

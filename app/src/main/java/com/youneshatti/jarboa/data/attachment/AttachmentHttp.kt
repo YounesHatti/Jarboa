@@ -36,9 +36,22 @@ internal fun isPublicAddress(address: InetAddress): Boolean {
     }
 }
 
+internal fun checkLiteralAddress(host: String) {
+    // OkHttp routes IP literals directly without invoking Dns.lookup.
+    if (':' in host || host.matches(Regex("[0-9.]+"))) {
+        if (!isPublicAddress(InetAddress.getByName(host))) {
+            throw UnknownHostException("Attachment host is not a public internet address")
+        }
+    }
+}
+
 /** Dedicated client: no cookies, credentials, redirects, cleartext or LAN destinations. */
 class AttachmentHttp internal constructor(
     private val client: OkHttpClient = OkHttpClient.Builder()
+        .addInterceptor { chain ->
+            checkLiteralAddress(chain.request().url.host)
+            chain.proceed(chain.request())
+        }
         .dns(object : Dns {
             override fun lookup(hostname: String): List<InetAddress> = Dns.SYSTEM.lookup(hostname).also { addresses ->
                 if (addresses.isEmpty() || addresses.any { !isPublicAddress(it) })
