@@ -88,6 +88,9 @@ internal fun cryptAttachment(
         cipher.update(buffer, 0, count)?.let(output::write)
     }
     checkActive()
+    if (!encrypt && total < EncryptedAttachment.TAG_BYTES) {
+        throw javax.crypto.AEADBadTagException("Attachment authentication tag is missing")
+    }
     output.write(cipher.doFinal())
     return total
 }

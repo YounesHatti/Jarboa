@@ -8,6 +8,7 @@ import android.provider.OpenableColumns
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -104,7 +105,7 @@ class AttachmentStore internal constructor(private val context: Context, private
                 selected.file.inputStream().use { input -> encrypted.outputStream().use { output ->
                     cryptAttachment(input, output, attachment, true) { coroutine.ensureActive() }
                 } }
-                http.upload(slot, encrypted) { progress("Uploading", it) }
+                http.upload(slot, encrypted) { if (coroutine.isActive) progress("Uploading", it) }
                 coroutine.ensureActive()
                 cacheFile(attachment.body).also { destination ->
                     makeRoom(selected.size)
@@ -125,7 +126,7 @@ class AttachmentStore internal constructor(private val context: Context, private
             val encrypted = File.createTempFile("download-", ".part", staged)
             val plain = File.createTempFile("verified-", ".part", downloaded)
             try {
-                http.download(attachment.downloadUrl, encrypted) { progress("Downloading", it) }
+                http.download(attachment.downloadUrl, encrypted) { if (coroutine.isActive) progress("Downloading", it) }
                 coroutine.ensureActive()
                 progress("Verifying encryption", null)
                 encrypted.inputStream().use { input -> plain.outputStream().use { output ->
