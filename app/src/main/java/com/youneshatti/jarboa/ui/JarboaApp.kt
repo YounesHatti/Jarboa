@@ -534,12 +534,15 @@ private fun ConversationScreen(
             )
         },
         bottomBar = {
+            Column {
+            AttachmentDraftCard(jid, viewModel, security.canSend && connectionState is XmppConnectionState.Connected)
             Row(
                 modifier = Modifier.fillMaxWidth()
                     .navigationBarsPadding()
                     .padding(12.dp),
                 verticalAlignment = Alignment.Bottom,
             ) {
+                AttachButton(jid, viewModel, security.canSend && connectionState is XmppConnectionState.Connected)
                 OutlinedTextField(
                     value = draft,
                     textStyle = MaterialTheme.typography.bodyLarge.forChatContent(),
@@ -566,6 +569,7 @@ private fun ConversationScreen(
                     modifier = Modifier.height(56.dp),
                 ) { Text("Send") }
             }
+            }
         },
         containerColor = Color.Black,
     ) { padding ->
@@ -590,6 +594,7 @@ private fun ConversationScreen(
                             message = message,
                             canRetry = security.canSend && connectionState is XmppConnectionState.Connected,
                             onRetry = viewModel::retryMessage,
+                            viewModel = viewModel,
                         )
                     }
                 }
@@ -699,6 +704,7 @@ private fun MessageBubble(
     message: DirectMessage,
     canRetry: Boolean,
     onRetry: (DirectMessage) -> Unit,
+    viewModel: MainViewModel,
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -711,11 +717,15 @@ private fun MessageBubble(
             contentColor = if (message.outgoing) Color.Black else Color.White,
         ) {
             Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
+                if (message.body.startsWith("aesgcm:", ignoreCase = true)) {
+                    AttachmentContent(message, viewModel)
+                } else {
                 Text(
                     message.body,
                     modifier = Modifier.fillMaxWidth(),
                     style = MaterialTheme.typography.bodyLarge.forChatContent(),
                 )
+                }
                 Row(modifier = Modifier.align(Alignment.End), verticalAlignment = Alignment.CenterVertically) {
                     Text(message.encryption.label, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.width(7.dp))

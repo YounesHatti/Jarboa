@@ -11,6 +11,12 @@
 # target copy available to test-only runBlocking/Flow code after the app itself is optimized.
 -keep class kotlinx.coroutines.** { *; }
 
+# The separate instrumentation APK uses OkHttp's local TLS server and attachment API.
+# These test-only entry points must survive in the optimized target; production is still shrunk.
+-keep class okhttp3.** { *; }
+-keep class okio.** { *; }
+-keep class com.youneshatti.jarboa.data.attachment.** { *; }
+
 # The migration test opens and queries the production Room database from a separate APK. Preserve
 # this complete test-facing boundary so R8 cannot inline Builder methods or remove Kotlin-generated
 # database/DAO bridges that are invisible while the target APK is optimized. Release builds do not

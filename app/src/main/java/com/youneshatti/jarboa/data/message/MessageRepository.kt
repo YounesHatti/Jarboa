@@ -43,7 +43,7 @@ class MessageRepository(private val database: JarboaDatabase) {
                 ConversationEntity(
                     jid = recipientJid,
                     displayName = existing?.displayName ?: recipientJid.substringBefore('@'),
-                    latestPreview = body,
+                    latestPreview = com.youneshatti.jarboa.data.attachment.attachmentPreview(body),
                     latestTimestamp = timestamp,
                     unreadCount = existing?.unreadCount ?: 0,
                 ),
@@ -86,7 +86,7 @@ class MessageRepository(private val database: JarboaDatabase) {
                 ConversationEntity(
                     jid = senderJid,
                     displayName = existing?.displayName ?: senderJid.substringBefore('@'),
-                    latestPreview = body,
+                    latestPreview = com.youneshatti.jarboa.data.attachment.attachmentPreview(body),
                     latestTimestamp = timestamp,
                     unreadCount = (existing?.unreadCount ?: 0) + 1,
                 ),
