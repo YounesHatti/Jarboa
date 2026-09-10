@@ -46,7 +46,8 @@ jobs:
       - name: Verify server received encrypted payloads only
         run: |
           ! grep -q JARBOA_TEST_LEAK ci/prosody.log
-          for id in ci-forward ci-reply ci-offline ci-reconnect ci-attachment; do
+          grep -q 'JARBOA_TEST_DELAYED_UPLOAD' ci/prosody.log
+          for id in ci-forward ci-reply ci-offline ci-reconnect ci-attachment ci-upload-concurrent; do
             grep -q "JARBOA_TEST_ENCRYPTED $id" ci/prosody.log
           done
       - uses: actions/upload-artifact@v7

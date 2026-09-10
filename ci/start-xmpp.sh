@@ -28,6 +28,7 @@ ssl = { key = "$RUNTIME/server.key"; certificate = "$RUNTIME/server.crt"; }
 VirtualHost "jarboa.test"
 VirtualHost "wrong.test"
 Component "upload.jarboa.test" "http_file_share"
+modules_enabled = { "jarboa_audit"; }
 http_file_share_size_limit = 26214416
 EOF
 sudo chown -R prosody:prosody "$RUNTIME"

@@ -12,6 +12,7 @@ local function audit_message(event)
     if not encrypted or not encrypted:get_child("payload") or
         body:find("Encrypted hello", 1, true) or body:find("Encrypted reply", 1, true) or
         body:find("After reconnect", 1, true) or body:find("While Alice", 1, true) or
+        body:find("Text during upload", 1, true) or
         body:find("aesgcm:", 1, true) then
         module:log("error", "JARBOA_TEST_LEAK malformed encrypted message: %s", id)
     else
@@ -23,3 +24,16 @@ end
 -- reply. Prosody consequently routes some outgoing stanzas as full JIDs and others as bare JIDs.
 module:hook("pre-message/bare", audit_message, 1000)
 module:hook("pre-message/full", audit_message, 1000)
+
+-- Deliberately slow slot response: OMEMO discovery and messaging must still work while it waits.
+local st = require "util.stanza"
+module:hook("iq-get/host/urn:xmpp:http:upload:0:request", function(event)
+    local request = event.stanza:get_child("request", "urn:xmpp:http:upload:0")
+    if not request or request.attr.filename ~= "ci-delayed.jpg" then return end
+    module:log("info", "JARBOA_TEST_DELAYED_UPLOAD")
+    local reply = st.reply(event.stanza):tag("slot", { xmlns = "urn:xmpp:http:upload:0" })
+        :tag("put", { url = "https://upload.jarboa.test/ci-delayed.jpg" }):up()
+        :tag("get", { url = "https://upload.jarboa.test/ci-delayed.jpg" })
+    module:add_timer(4, function() event.origin.send(reply) end)
+    return true
+end, 1000)

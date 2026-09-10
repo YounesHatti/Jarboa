@@ -12,6 +12,7 @@ import com.youneshatti.jarboa.domain.model.OmemoSessionStatus
 import com.youneshatti.jarboa.domain.model.OmemoTrustLevel
 import com.youneshatti.jarboa.domain.model.XmppConnectionState
 import kotlinx.coroutines.async
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -93,6 +94,15 @@ class OmemoRuntimeTest {
             val slot = alice.requestUploadSlot("ci-file.jpg", 1234)
             assertTrue(slot.putUrl.startsWith("https://"))
             assertTrue(slot.getUrl.startsWith("https://"))
+            val delayedSlot = async { alice.requestUploadSlot("ci-delayed.jpg", 1234) }
+            delay(500)
+            assertFalse("The slow-slot fixture must be active", delayedSlot.isCompleted)
+            withTimeout(2_500) {
+                assertTrue(alice.loadContactSecurity("bob@jarboa.test").canSend)
+                alice.sendDirectMessage("bob@jarboa.test", "Text during upload", "ci-upload-concurrent")
+            }
+            assertFalse("Messaging must finish before the delayed upload slot", delayedSlot.isCompleted)
+            assertTrue(delayedSlot.await().putUrl.startsWith("https://"))
             val attachment = com.youneshatti.jarboa.data.attachment.EncryptedAttachment.create(slot.getUrl)
             val mediaReceived = async {
                 withTimeout(30_000) { bob.events.filterIsInstance<XmppEvent.IncomingMessage>().first { it.stanzaId == "ci-attachment" } }

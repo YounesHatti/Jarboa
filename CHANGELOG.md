@@ -6,6 +6,14 @@ All notable Jarboa changes will be recorded here. The project follows semantic v
 
 ### Fixed
 
+- Keep upload discovery and slot requests off the OMEMO connection lock, so slow uploads do not block encrypted chats.
+- Discover advertised upload services with bounded concurrency; skip unresponsive components and cache only successful discovery.
+- Report upload discovery versus slot-request failures and safe XMPP server error conditions.
+
+## [0.4.1] - 2026-09-10
+
+### Fixed
+
 - Bound visible-chat device checks and roster preparation, cancel interruptible Smack waits on navigation, and retry temporary discovery failures automatically.
 - Wait for both the connection and OMEMO session before checking devices; no indefinite checking label while disconnected.
 - Bound upload-slot requests and report the failing attachment stage with privacy-safe network categories and HTTP status codes.

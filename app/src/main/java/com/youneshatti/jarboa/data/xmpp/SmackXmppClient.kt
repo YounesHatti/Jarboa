@@ -80,6 +80,7 @@ class SmackXmppClient(
     private val mutableContacts = MutableStateFlow<List<XmppContact>>(emptyList())
     private val eventChannel = Channel<XmppEvent>(Channel.UNLIMITED)
     private val connectionMutex = Mutex()
+    private val uploadClient = XmppUploadClient()
     private val clientScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var connection: XMPPTCPConnection? = null
     private var omemoManager: OmemoManager? = null
@@ -191,15 +192,13 @@ class SmackXmppClient(
         }
     }
 
-    suspend fun requestUploadSlot(filename: String, size: Long): com.youneshatti.jarboa.data.attachment.UploadSlot =
-        interruptibleXmppOperation(connectionMutex, timeoutMillis = 30_000) {
-            val upload = org.jivesoftware.smackx.httpfileupload.HttpFileUploadManager.getInstanceFor(requireConnection())
-            check(upload.discoverUploadService()) { "Your XMPP server does not offer file uploads." }
-            val slot = upload.requestSlot(filename, size, "application/octet-stream")
-            com.youneshatti.jarboa.data.attachment.UploadSlot(
-                slot.putUrl.toString(), slot.getUrl.toString(), slot.headers,
-            )
-        }
+    suspend fun requestUploadSlot(filename: String, size: Long): com.youneshatti.jarboa.data.attachment.UploadSlot {
+        val active = interruptibleXmppOperation(connectionMutex) { requireConnection() }
+        val slot = uploadClient.request(active, filename, size)
+        // An old account's in-flight slot must never escape after logout/account replacement.
+        interruptibleXmppOperation(connectionMutex) { check(requireConnection() === active) }
+        return slot
+    }
 
     override suspend fun sendDirectMessage(
         recipientJid: String,
