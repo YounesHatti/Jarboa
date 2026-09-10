@@ -36,8 +36,8 @@ internal class XmppUploadClient {
                         val disco = ServiceDiscoveryManager.getInstanceFor(connection)
                         val items = runInterruptible(Dispatchers.IO) { disco.discoverItems(connection.xmppServiceDomain) }
                         // Only server-advertised, node-less domain services are candidates. No guessed hosts.
-                        val candidates = items.items.filter { it.node == null }
-                            .mapNotNull { it.entityID.asDomainBareJidIfPossible() }
+                        val candidates = items.items.filter { it.node.isNullOrEmpty() }
+                            .mapNotNull { it.entityID as? DomainBareJid }
                         findResponsiveUploadService(listOf(connection.xmppServiceDomain) + candidates) { address ->
                             runInterruptible(Dispatchers.IO) {
                                 val info = disco.discoverInfo(address)
