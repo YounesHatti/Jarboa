@@ -4,6 +4,8 @@ import android.app.Application
 import android.net.Uri
 import com.youneshatti.jarboa.data.attachment.SelectedAttachment
 import com.youneshatti.jarboa.data.attachment.EncryptedAttachment
+import com.youneshatti.jarboa.data.attachment.AttachmentSendStage
+import com.youneshatti.jarboa.data.attachment.attachmentSendFailure
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.update
@@ -19,7 +21,6 @@ import com.youneshatti.jarboa.domain.model.Conversation
 import com.youneshatti.jarboa.domain.model.DirectMessage
 import com.youneshatti.jarboa.domain.model.MessageStatus
 import com.youneshatti.jarboa.domain.model.OmemoContactSecurity
-import com.youneshatti.jarboa.domain.model.OmemoContactStatus
 import com.youneshatti.jarboa.domain.model.OmemoSessionState
 import com.youneshatti.jarboa.domain.model.OmemoSessionStatus
 import com.youneshatti.jarboa.domain.model.OmemoTrustLevel
@@ -34,9 +35,6 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.collect
-import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -79,11 +77,11 @@ class MainViewModel(
         viewModelScope.launch {
             observeContactSecurity(
                 requests = combine(
-                    mutableSelectedConversation, foreground, connectionState, contactSecurityRefresh,
-                ) { jid, visible, connection, refresh ->
+                    mutableSelectedConversation, foreground, connectionState, contactSecurityRefresh, omemoState,
+                ) { jid, visible, connection, refresh, omemo ->
                     if (jid == null || !visible) null else ContactSecurityRequest(
                         jid = jid,
-                        ready = connection is XmppConnectionState.Connected,
+                        ready = connection is XmppConnectionState.Connected && omemo.status == OmemoSessionStatus.READY,
                         refresh = refresh,
                     )
                 },
@@ -99,15 +97,6 @@ class MainViewModel(
                 load = container.xmppClient::loadContactSecurity,
                 publish = { mutableContactSecurity.value = it },
             )
-        }
-        viewModelScope.launch {
-            omemoState.map { it.status }.distinctUntilChanged().collect { status ->
-                if (status == OmemoSessionStatus.READY &&
-                    mutableContactSecurity.value?.status == OmemoContactStatus.UNAVAILABLE
-                ) {
-                    mutableSelectedConversation.value?.let(::refreshContactSecurity)
-                }
-            }
         }
     }
 
@@ -260,21 +249,31 @@ class MainViewModel(
         if (attachmentJob?.isActive == true || mutableBusy.value) return
         attachmentJob = viewModelScope.launch {
             mutableAttachmentDraft.value = draft.copy(working = true, status = "Checking encryption")
+            var stage = AttachmentSendStage.CHECKING
             try {
                 check(container.xmppClient.loadContactSecurity(draft.jid).canSend)
                 val body = container.attachmentStore.upload(selected, container.xmppClient::requestUploadSlot) { status, percent ->
+                    stage = when (status) {
+                        "Requesting upload" -> AttachmentSendStage.REQUESTING
+                        "Encrypting" -> AttachmentSendStage.ENCRYPTING
+                        "Uploading" -> AttachmentSendStage.UPLOADING
+                        "Storing" -> AttachmentSendStage.STORING
+                        else -> stage
+                    }
                     mutableAttachmentDraft.update { it?.copy(status = status, percent = percent) }
                 }
                 // The ordinary OMEMO send path checks device trust again after the upload.
                 // Once queued, retries use the existing message rather than uploading a second copy.
+                stage = AttachmentSendStage.SENDING
                 try { container.sendMessage(draft.jid, body) }
                 finally {
                     withContext(kotlinx.coroutines.NonCancellable + Dispatchers.IO) { selected.file.delete() }
                     mutableAttachmentDraft.value = null
                 }
             } catch (cancelled: CancellationException) { throw cancelled
-            } catch (_: Exception) {
-                mutableAttachmentDraft.update { it?.copy(working = false, status = "Could not send. Check encryption and your server's upload limit, then retry.", percent = null) }
+            } catch (error: Exception) {
+                mutableAttachmentDraft.update { it?.copy(working = false, status = attachmentSendFailure(stage, error), percent = null) }
+                if (stage == AttachmentSendStage.CHECKING) refreshContactSecurity(draft.jid)
                 if (mutableAttachmentDraft.value == null) mutableError.value = "The attachment was uploaded, but its message could not be sent. Use Try again on the message."
             }
         }

@@ -92,7 +92,9 @@ class AttachmentHttp internal constructor(
             }
         }
         execute(request.put(body).build()) { response ->
-            check(response.code in listOf(200, 201, 204)) { "The upload server did not accept the attachment." }
+            if (response.code !in listOf(200, 201, 204)) {
+                throw AttachmentTransferFailure("The upload server returned HTTP ${response.code}.")
+            }
         }
     }
 
@@ -127,7 +129,7 @@ class AttachmentHttp internal constructor(
             call.enqueue(object : Callback {
                 override fun onFailure(call: Call, e: IOException) {
                     if (call.isCanceled()) onCancelled()
-                    continuation.resumeWithException(IOException("Attachment transfer failed. Check your connection and try again."))
+                    continuation.resumeWithException(safeTransferFailure(e))
                 }
                 override fun onResponse(call: Call, response: Response) {
                     val result = runCatching {

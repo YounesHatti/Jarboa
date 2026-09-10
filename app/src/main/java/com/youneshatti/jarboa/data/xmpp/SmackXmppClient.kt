@@ -163,8 +163,8 @@ class SmackXmppClient(
         }
     }
 
-    override suspend fun addContact(contactJid: String) = withContext(Dispatchers.IO) {
-        connectionMutex.withLock {
+    override suspend fun addContact(contactJid: String) {
+        interruptibleXmppOperation(connectionMutex) {
             val activeConnection = requireConnection()
             val contact = JidCreate.entityBareFrom(contactJid)
             require(activeConnection.user.asBareJid() != contact) { "You cannot add your own account as a contact." }
@@ -192,15 +192,13 @@ class SmackXmppClient(
     }
 
     suspend fun requestUploadSlot(filename: String, size: Long): com.youneshatti.jarboa.data.attachment.UploadSlot =
-        withContext(Dispatchers.IO) {
-            connectionMutex.withLock {
-                val upload = org.jivesoftware.smackx.httpfileupload.HttpFileUploadManager.getInstanceFor(requireConnection())
-                check(upload.discoverUploadService()) { "Your XMPP server does not offer file uploads." }
-                val slot = upload.requestSlot(filename, size, "application/octet-stream")
-                com.youneshatti.jarboa.data.attachment.UploadSlot(
-                    slot.putUrl.toString(), slot.getUrl.toString(), slot.headers,
-                )
-            }
+        interruptibleXmppOperation(connectionMutex, timeoutMillis = 30_000) {
+            val upload = org.jivesoftware.smackx.httpfileupload.HttpFileUploadManager.getInstanceFor(requireConnection())
+            check(upload.discoverUploadService()) { "Your XMPP server does not offer file uploads." }
+            val slot = upload.requestSlot(filename, size, "application/octet-stream")
+            com.youneshatti.jarboa.data.attachment.UploadSlot(
+                slot.putUrl.toString(), slot.getUrl.toString(), slot.headers,
+            )
         }
 
     override suspend fun sendDirectMessage(
@@ -250,15 +248,13 @@ class SmackXmppClient(
     }
 
     override suspend fun loadContactSecurity(recipientJid: String): OmemoContactSecurity =
-        withContext(Dispatchers.IO) {
-            connectionMutex.withLock {
-                requireConnection()
-                loadContactSecurity(
-                    manager = requireReadyOmemoManager(),
-                    recipient = JidCreate.entityBareFrom(recipientJid),
-                    refresh = true,
-                )
-            }
+        interruptibleXmppOperation(connectionMutex) {
+            requireConnection()
+            loadContactSecurity(
+                manager = requireReadyOmemoManager(),
+                recipient = JidCreate.entityBareFrom(recipientJid),
+                refresh = true,
+            )
         }
 
     override suspend fun setDeviceTrust(
@@ -303,6 +299,10 @@ class SmackXmppClient(
                 devices = devices,
             )
         }
+    } catch (interrupted: InterruptedException) {
+        throw interrupted
+    } catch (cancelled: kotlinx.coroutines.CancellationException) {
+        throw cancelled
     } catch (error: Throwable) {
         OmemoContactSecurity(
             jid = recipient.toString(),
