@@ -9,6 +9,7 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.withTimeoutOrNull
 
 internal data class ContactSecurityRequest(
     val jid: String,
@@ -28,13 +29,27 @@ internal suspend fun observeContactSecurity(
             publish(null)
             return@collectLatest
         }
+        if (!request.ready) {
+            publish(OmemoContactSecurity(request.jid, OmemoContactStatus.UNAVAILABLE,
+                detail = "Waiting for the encrypted connection. Jarboa will check devices when it is ready."))
+            return@collectLatest
+        }
         publish(OmemoContactSecurity.checking(request.jid))
-        if (!request.ready) return@collectLatest
-        prepare(request.jid)
+        try {
+            // Roster approval helps discovery but must not hold it hostage.
+            withTimeoutOrNull(10_000) { prepare(request.jid) }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            // Device discovery is independent of roster preparation.
+        }
         var retryDelay = 2_000L
         while (true) {
             val security = try {
-                load(request.jid)
+                withTimeoutOrNull(20_000) { load(request.jid) }
+                    ?.takeUnless { it.status == OmemoContactStatus.CHECKING }
+                    ?: OmemoContactSecurity(request.jid, OmemoContactStatus.UNAVAILABLE,
+                        detail = "The device check timed out. Jarboa will retry automatically.")
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (_: Exception) {

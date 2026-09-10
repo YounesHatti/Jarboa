@@ -105,8 +105,10 @@ class AttachmentStore internal constructor(private val context: Context, private
                 selected.file.inputStream().use { input -> encrypted.outputStream().use { output ->
                     cryptAttachment(input, output, attachment, true) { coroutine.ensureActive() }
                 } }
+                progress("Uploading", null)
                 http.upload(slot, encrypted) { if (coroutine.isActive) progress("Uploading", it) }
                 coroutine.ensureActive()
+                progress("Storing", null)
                 cacheFile(attachment.body).also { destination ->
                     makeRoom(selected.size)
                     selected.file.copyTo(destination, overwrite = true)

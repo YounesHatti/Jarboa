@@ -22,6 +22,64 @@ class ContactSecurityObserverTest {
         OmemoContactSecurity(address, OmemoContactStatus.READY, listOf(OmemoDeviceInfo(1, "fingerprint", trust = trust)))
 
     @Test
+    fun `stalled lookup leaves checking and automatically recovers`() = runTest {
+        val requests = MutableStateFlow<ContactSecurityRequest?>(ContactSecurityRequest(jid, true))
+        var calls = 0
+        var latest: OmemoContactSecurity? = null
+        backgroundScope.launch {
+            observeContactSecurity(requests, {}, {
+                if (++calls == 1) awaitCancellation() else ready(it)
+            }, { latest = it })
+        }
+        runCurrent()
+        assertEquals(OmemoContactStatus.CHECKING, latest!!.status)
+        advanceTimeBy(20_000)
+        runCurrent()
+        assertEquals(OmemoContactStatus.UNAVAILABLE, latest!!.status)
+        assertFalse(latest!!.canSend)
+        advanceTimeBy(2_000)
+        runCurrent()
+        assertTrue(latest!!.canSend)
+    }
+
+    @Test
+    fun `stalled or failed roster preparation cannot prevent device discovery`() = runTest {
+        for (stalled in listOf(true, false)) {
+            val requests = MutableStateFlow<ContactSecurityRequest?>(ContactSecurityRequest(jid, true))
+            var latest: OmemoContactSecurity? = null
+            val job = backgroundScope.launch {
+                observeContactSecurity(requests, {
+                    if (stalled) awaitCancellation() else error("Roster unavailable")
+                }, { ready(it) }, { latest = it })
+            }
+            runCurrent()
+            advanceTimeBy(10_000)
+            runCurrent()
+            assertTrue(latest!!.canSend)
+            job.cancel()
+        }
+    }
+
+    @Test
+    fun `returning from picker cancels stalled lookup and starts a fresh check`() = runTest {
+        val requests = MutableStateFlow<ContactSecurityRequest?>(ContactSecurityRequest(jid, true))
+        var calls = 0
+        var latest: OmemoContactSecurity? = null
+        backgroundScope.launch {
+            observeContactSecurity(requests, {}, {
+                if (++calls == 1) awaitCancellation() else ready(it)
+            }, { latest = it })
+        }
+        runCurrent()
+        requests.value = null
+        runCurrent()
+        requests.value = ContactSecurityRequest(jid, true)
+        runCurrent()
+        assertTrue(latest!!.canSend)
+        assertEquals(2, calls)
+    }
+
+    @Test
     fun `unavailable discovery recovers without navigating away`() = runTest {
         val requests = MutableStateFlow<ContactSecurityRequest?>(ContactSecurityRequest(jid, true))
         var calls = 0
@@ -52,6 +110,7 @@ class ContactSecurityObserverTest {
         runCurrent()
         assertEquals(0, calls)
         assertFalse(latest!!.canSend)
+        assertEquals(OmemoContactStatus.UNAVAILABLE, latest!!.status)
         requests.value = ContactSecurityRequest(jid, true)
         runCurrent()
         assertTrue(latest!!.canSend)
