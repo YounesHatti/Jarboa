@@ -27,6 +27,20 @@ module:hook("pre-message/full", audit_message, 1000)
 
 -- Deliberately slow slot response: OMEMO discovery and messaging must still work while it waits.
 local st = require "util.stanza"
+-- Reject the recovery fixture account's first two bundle publications. Authentication succeeds,
+-- but OMEMO must fail closed and then recover without UI interaction or another login.
+local rejected_bundles = 0
+module:hook("iq-set/bare/http://jabber.org/protocol/pubsub:pubsub", function(event)
+    if event.origin.username ~= "recovery" or rejected_bundles >= 2 then return end
+    local pubsub = event.stanza:get_child("pubsub", "http://jabber.org/protocol/pubsub")
+    local publish = pubsub and pubsub:get_child("publish")
+    if not publish or not (publish.attr.node or ""):match("^eu%.siacs%.conversations%.axolotl%.bundles:") then return end
+    rejected_bundles = rejected_bundles + 1
+    module:log("info", "JARBOA_TEST_OMEMO_TEMPORARY_FAILURE %d", rejected_bundles)
+    event.origin.send(st.error_reply(event.stanza, "wait", "service-unavailable"))
+    return true
+end, 1000)
+
 module:hook("iq-get/host/urn:xmpp:http:upload:0:request", function(event)
     local request = event.stanza:get_child("request", "urn:xmpp:http:upload:0")
     if not request or request.attr.filename ~= "ci-delayed.jpg" then return end

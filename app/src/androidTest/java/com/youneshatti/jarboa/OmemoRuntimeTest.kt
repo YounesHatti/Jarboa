@@ -71,6 +71,8 @@ class OmemoRuntimeTest {
         try {
             alice.connect(config("alice"), "ci-alice-password".toCharArray())
             bob.connect(config("bob"), "ci-bob-password".toCharArray())
+            awaitReady(alice)
+            awaitReady(bob)
             assertTrue(alice.connectionState.value.toString(), alice.connectionState.value is XmppConnectionState.Connected)
             assertTrue(bob.connectionState.value.toString(), bob.connectionState.value is XmppConnectionState.Connected)
             assertEquals(alice.omemoState.value.toString(), OmemoSessionStatus.READY, alice.omemoState.value.status)
@@ -118,6 +120,7 @@ class OmemoRuntimeTest {
                 withTimeout(30_000) { alice.events.filterIsInstance<XmppEvent.IncomingMessage>().first { it.stanzaId == "ci-offline" } }
             }
             alice.connect(config("alice"), "ci-alice-password".toCharArray())
+            awaitReady(alice)
             assertEquals("While Alice was offline", offline.await().body)
             assertEquals(alice.omemoState.value.toString(), OmemoSessionStatus.READY, alice.omemoState.value.status)
             assertEquals("Reconnecting must retain the identity", fingerprint, alice.omemoState.value.ownFingerprint)
@@ -141,5 +144,43 @@ class OmemoRuntimeTest {
             alice.disconnect()
             bob.disconnect()
         }
+    }
+
+    @Test
+    fun temporaryOwnBundleFailureRecoversWithoutReopeningChatOrSigningInAgain() = runBlocking {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val directory = File(context.noBackupFilesDir, "omemo")
+        val client = SmackXmppClient(OmemoTrustStore(context), directory)
+        val peer = SmackXmppClient(OmemoTrustStore(context), directory)
+        try {
+            client.connect(AccountConfig("recovery@jarboa.test", "10.0.2.2", 5222), "ci-recovery-password".toCharArray())
+            assertTrue("Login must finish independently of OMEMO", client.connectionState.value is XmppConnectionState.Connected)
+            val failure = withTimeout(30_000) { client.omemoState.first { it.status == OmemoSessionStatus.FAILED } }
+            assertEquals("OMEMO-INIT-SERVER", failure.diagnosticCode)
+            assertTrue(runCatching { client.sendDirectMessage("alice@jarboa.test", "Must never be sent", "ci-blocked") }.isFailure)
+            // No retryEncryption(), contact lookup, navigation, or foreground event here.
+            awaitReady(client)
+            assertTrue(client.connectionState.value is XmppConnectionState.Connected)
+            val fingerprint = client.omemoState.value.ownFingerprint
+            peer.connect(AccountConfig("alice@jarboa.test", "10.0.2.2", 5222), "ci-alice-password".toCharArray())
+            awaitReady(peer)
+            val received = async {
+                withTimeout(30_000) { peer.events.filterIsInstance<XmppEvent.IncomingMessage>().first { it.stanzaId == "ci-auto-recovery" } }
+            }
+            client.sendDirectMessage("alice@jarboa.test", "Recovered encrypted session", "ci-auto-recovery")
+            assertEquals("Recovered encrypted session", received.await().body)
+            assertEquals(MessageEncryption.OMEMO_UNVERIFIED, received.await().encryption)
+            client.disconnect()
+            client.connect(AccountConfig("recovery@jarboa.test", "10.0.2.2", 5222), "ci-recovery-password".toCharArray())
+            awaitReady(client)
+            assertEquals("Recovery must preserve the local identity", fingerprint, client.omemoState.value.ownFingerprint)
+        } finally {
+            client.disconnect()
+            peer.disconnect()
+        }
+    }
+
+    private suspend fun awaitReady(client: SmackXmppClient) {
+        withTimeout(60_000) { client.omemoState.first { it.status == OmemoSessionStatus.READY } }
     }
 }

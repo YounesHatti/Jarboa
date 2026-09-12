@@ -47,7 +47,8 @@ jobs:
         run: |
           ! grep -q JARBOA_TEST_LEAK ci/prosody.log
           grep -q 'JARBOA_TEST_DELAYED_UPLOAD' ci/prosody.log
-          for id in ci-forward ci-reply ci-offline ci-reconnect ci-attachment ci-upload-concurrent; do
+          grep -q 'JARBOA_TEST_OMEMO_TEMPORARY_FAILURE 2' ci/prosody.log
+          for id in ci-forward ci-reply ci-offline ci-reconnect ci-attachment ci-upload-concurrent ci-auto-recovery; do
             grep -q "JARBOA_TEST_ENCRYPTED $id" ci/prosody.log
           done
       - uses: actions/upload-artifact@v7
