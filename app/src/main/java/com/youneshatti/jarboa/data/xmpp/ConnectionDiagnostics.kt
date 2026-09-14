@@ -77,7 +77,7 @@ internal fun safeConnectionFailure(error: Throwable): String {
 private fun safeLibraryLocations(stack: List<StackTraceElement>): String {
     // R8 may rename extension classes. Retain their code symbols for mapping-file lookup,
     // without adding keep rules that would change Smack's reflection-based startup.
-    val frames = stack.take(128).filterNot {
+    val frames = stack.filterNot {
         it.className.startsWith("java.") || it.className.startsWith("kotlin.") ||
             it.className.startsWith("kotlinx.") || it.className.startsWith("android.") ||
             it.className.startsWith("dalvik.")
