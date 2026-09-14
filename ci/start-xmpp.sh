@@ -35,6 +35,7 @@ sudo chown -R prosody:prosody "$RUNTIME"
 sudo cp "$RUNTIME/prosody.cfg.lua" /etc/prosody/prosody.cfg.lua
 sudo -u prosody prosodyctl register alice jarboa.test ci-alice-password
 sudo -u prosody prosodyctl register bob jarboa.test ci-bob-password
+sudo -u prosody prosodyctl register recovery jarboa.test ci-recovery-password
 sudo -u prosody prosody > ci/prosody.log 2>&1 &
 for attempt in {1..30}; do
   if (echo > /dev/tcp/127.0.0.1/5222) 2>/dev/null; then exit 0; fi

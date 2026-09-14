@@ -6,6 +6,15 @@ All notable Jarboa changes will be recorded here. The project follows semantic v
 
 ### Fixed
 
+- Recover an authenticated account's failed OMEMO setup automatically with cancellable, timed attempts and capped retry backoff, independently of chat navigation.
+- Finish sign-in after authentication rather than waiting for encryption publication and roster queries; continue blocking outgoing messages until OMEMO is ready.
+- Preserve privacy-safe connection failure diagnostics when encryption is paused during reconnection.
+- Exercise temporary OMEMO publication failures and unattended recovery in the optimized Android test APK.
+
+## [0.4.2] - 2026-09-12
+
+### Fixed
+
 - Keep upload discovery and slot requests off the OMEMO connection lock, so slow uploads do not block encrypted chats.
 - Discover advertised upload services with bounded concurrency; skip unresponsive components and cache only successful discovery.
 - Report upload discovery versus slot-request failures and safe XMPP server error conditions.

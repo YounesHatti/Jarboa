@@ -16,4 +16,6 @@ internal suspend fun <T> interruptibleXmppOperation(
     block: () -> T,
 ): T = withTimeoutOrNull(timeoutMillis) {
     Result.success(mutex.withLock { runInterruptible(Dispatchers.IO, block) })
-}?.getOrThrow() ?: throw IOException("XMPP operation timed out. Please retry.")
+}?.getOrThrow() ?: throw XmppOperationTimeoutException()
+
+internal class XmppOperationTimeoutException : IOException("XMPP operation timed out. Please retry.")
