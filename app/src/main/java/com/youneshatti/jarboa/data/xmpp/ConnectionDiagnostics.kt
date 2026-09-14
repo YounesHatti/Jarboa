@@ -84,7 +84,13 @@ private fun safeLibraryLocations(stack: List<StackTraceElement>): String {
     }.filter {
         it.className.length <= 200 && it.methodName.length <= 100 &&
             safeCodeName.matches(it.className) && safeCodeName.matches(it.methodName)
-    }.distinctBy { it.className + "." + it.methodName }.take(8)
+    }.distinctBy { it.className + "." + it.methodName }.sortedBy {
+        when {
+            it.className.startsWith("org.jivesoftware.smack") -> 0
+            it.className.startsWith("com.youneshatti.jarboa") -> 1
+            else -> 2
+        }
+    }.take(8)
     return "Library locations: " + if (frames.isEmpty()) "unavailable" else
         frames.joinToString(" -> ") { it.className + "." + it.methodName }
 }
