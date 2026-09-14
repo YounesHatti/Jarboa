@@ -65,6 +65,7 @@ class MainViewModel(
     val contactSecurity: StateFlow<OmemoContactSecurity?> = mutableContactSecurity.asStateFlow()
     val hideNotificationContent: StateFlow<Boolean> = mutableNotificationPrivacy.asStateFlow()
     val connectionState: StateFlow<XmppConnectionState> = container.xmppClient.connectionState
+    val connectionDiagnostics: StateFlow<String> = container.xmppClient.connectionDiagnostics
     val omemoState: StateFlow<OmemoSessionState> = container.xmppClient.omemoState
     val contacts: StateFlow<List<XmppContact>> = container.xmppClient.contacts
     val conversations: StateFlow<List<Conversation>> = container.messageRepository.conversations.stateIn(

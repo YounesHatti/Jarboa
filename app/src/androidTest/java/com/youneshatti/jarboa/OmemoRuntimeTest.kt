@@ -53,6 +53,11 @@ class OmemoRuntimeTest {
             assertTrue(runCatching { client.connect(AccountConfig("alice@jarboa.test", "10.0.2.2", 5222), password) }.isFailure)
             assertEquals(FailureReason.AUTHENTICATION, (client.connectionState.value as XmppConnectionState.Failed).reason)
             assertTrue(password.all { it == '\u0000' })
+            val report = client.connectionDiagnostics.value
+            assertTrue(report.contains("CONNECT_FAILED"))
+            assertTrue(report.contains("SASLErrorException"))
+            assertFalse(report.contains("wrong-password"))
+            assertFalse(report.contains("alice@jarboa.test"))
             // The CA is trusted by the CI-only variant, but its certificate names jarboa.test.
             assertTrue(runCatching { client.connect(AccountConfig("alice@wrong.test", "10.0.2.2", 5222), "unused".toCharArray()) }.isFailure)
             assertEquals(FailureReason.TLS, (client.connectionState.value as XmppConnectionState.Failed).reason)
@@ -94,6 +99,9 @@ class OmemoRuntimeTest {
 
             // Exercise Smack's real upload discovery and slot parser after R8 optimization.
             val slot = alice.requestUploadSlot("ci-file.jpg", 1234)
+            assertTrue(alice.connectionDiagnostics.value.contains("UPLOAD_SLOT_RECEIVED"))
+            assertFalse(alice.connectionDiagnostics.value.contains("ci-file.jpg"))
+            assertFalse(alice.connectionDiagnostics.value.contains(slot.putUrl.toString()))
             assertTrue(slot.putUrl.startsWith("https://"))
             assertTrue(slot.getUrl.startsWith("https://"))
             val delayedSlot = async { alice.requestUploadSlot("ci-delayed.jpg", 1234) }

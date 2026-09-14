@@ -19,6 +19,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
@@ -86,7 +87,11 @@ class SmackXmppClient(
     private val eventChannel = Channel<XmppEvent>(Channel.UNLIMITED)
     private val connectionMutex = Mutex()
     private val omemoSetupMutex = Mutex()
-    private val uploadClient = XmppUploadClient()
+    private val diagnostics = ConnectionDiagnostics()
+    val connectionDiagnostics: StateFlow<String> = diagnostics.report
+    private val uploadClient = XmppUploadClient { active, event, error ->
+        if (connection === active) recordDiagnostic(active, event, error)
+    }
     private val clientScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     @Volatile private var connection: XMPPTCPConnection? = null
     @Volatile private var omemoManager: OmemoManager? = null
@@ -128,6 +133,16 @@ class SmackXmppClient(
 
                     val newConnection = XMPPTCPConnection(builder.build())
                     connection = newConnection
+                    recordDiagnostic(newConnection, ConnectionDiagnosticEvent.CONNECT_START)
+                    // Observe the original parser failure without logging the raw stanza or
+                    // changing Smack's existing fail-closed parsing behavior.
+                    val originalParserCallback = newConnection.parsingExceptionCallback
+                    newConnection.setParsingExceptionCallback { stanza ->
+                        if (connection === newConnection) {
+                            recordDiagnostic(newConnection, ConnectionDiagnosticEvent.STANZA_PARSE_FAILED, stanza.parsingException)
+                        }
+                        originalParserCallback?.handleUnparsableStanza(stanza)
+                    }
                     addConnectionListener(newConnection)
                     val activeRoster = configureRoster(newConnection)
                     newConnection.connect()
@@ -135,8 +150,31 @@ class SmackXmppClient(
                         throw SSLHandshakeException("The server did not establish a validated TLS session.")
                     }
                     configureMessaging(newConnection)
+                    recordDiagnostic(newConnection, ConnectionDiagnosticEvent.TLS_CONNECTED)
                     state.value = XmppConnectionState.Authenticating
-                    newConnection.login()
+                    recordDiagnostic(newConnection, ConnectionDiagnosticEvent.LOGIN_START)
+                    // isAuthenticated becomes true before Smack runs its synchronous login
+                    // listeners (including upload discovery). Distinguish that wait from SASL.
+                    val loginThread = Thread.currentThread()
+                    val loginObserver = clientScope.launch {
+                        repeat(6) {
+                            delay(10_000)
+                            if (connection === newConnection) {
+                                diagnostics.record(
+                                    ConnectionDiagnosticEvent.LOGIN_WAITING,
+                                    newConnection.isConnected,
+                                    newConnection.isAuthenticated,
+                                    waitingStack = loginThread.stackTrace,
+                                )
+                            }
+                        }
+                    }
+                    try {
+                        newConnection.login()
+                        recordDiagnostic(newConnection, ConnectionDiagnosticEvent.LOGIN_RETURNED)
+                    } finally {
+                        loginObserver.cancel()
+                    }
                     ReconnectionManager.getInstanceFor(newConnection).enableAutomaticReconnection()
                     state.value = XmppConnectionState.Connected(newConnection.user.asBareJid().toString())
 
@@ -153,6 +191,7 @@ class SmackXmppClient(
                     scheduleRosterRefresh(newConnection, activeRoster)
                     Unit
                 } catch (error: Throwable) {
+                    connection?.let { recordDiagnostic(it, ConnectionDiagnosticEvent.CONNECT_FAILED, error) }
                     disconnectCurrent(resetOmemoState = false)
                     state.value = error.toFailureState()
                     throw error
@@ -167,6 +206,7 @@ class SmackXmppClient(
         connectionMutex.withLock {
             state.value = XmppConnectionState.SignedOut
             disconnectCurrent()
+            diagnostics.clear()
         }
     }
 
@@ -450,6 +490,7 @@ class SmackXmppClient(
         activeConnection.addConnectionListener(object : AbstractConnectionListener() {
             override fun authenticated(connection: XMPPConnection, resumed: Boolean) {
                 if (this@SmackXmppClient.connection !== activeConnection) return
+                recordDiagnostic(activeConnection, ConnectionDiagnosticEvent.AUTHENTICATED)
                 val previousState = state.value
                 val bound = connection.user?.asBareJid()?.toString() ?: return
                 state.value = XmppConnectionState.Connected(bound)
@@ -467,6 +508,7 @@ class SmackXmppClient(
 
             override fun connectionClosed() {
                 if (connection !== activeConnection) return
+                recordDiagnostic(activeConnection, ConnectionDiagnosticEvent.CONNECTION_CLOSED)
                 cancelOmemoRecovery()
                 if (state.value !is XmppConnectionState.SignedOut) {
                     state.value = XmppConnectionState.Disconnected
@@ -475,6 +517,7 @@ class SmackXmppClient(
 
             override fun connectionClosedOnError(error: Exception) {
                 if (connection !== activeConnection) return
+                recordDiagnostic(activeConnection, ConnectionDiagnosticEvent.CONNECTION_ERROR, error)
                 cancelOmemoRecovery()
                 mutableOmemoState.value = OmemoSessionState(
                     status = OmemoSessionStatus.FAILED,
@@ -494,6 +537,7 @@ class SmackXmppClient(
 
                 override fun reconnectionFailed(error: Exception) {
                     if (connection !== activeConnection) return
+                    recordDiagnostic(activeConnection, ConnectionDiagnosticEvent.RECONNECT_FAILED, error)
                     state.value = error.toFailureState()
                 }
             },
@@ -503,6 +547,10 @@ class SmackXmppClient(
     private fun requireConnection(): XMPPTCPConnection = connection
         ?.takeIf { it.isConnected && it.isAuthenticated }
         ?: error("The XMPP connection is offline.")
+
+    private fun recordDiagnostic(active: XMPPConnection, event: ConnectionDiagnosticEvent, error: Throwable? = null) {
+        diagnostics.record(event, active.isConnected, active.isAuthenticated, error)
+    }
 
     private fun prepareOmemoManager(activeConnection: XMPPTCPConnection): OmemoManager? = try {
         // Crypto setup belongs to the protected OMEMO phase, not Application.onCreate or login.

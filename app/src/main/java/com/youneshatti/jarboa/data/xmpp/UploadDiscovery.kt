@@ -15,6 +15,7 @@ import kotlinx.coroutines.withTimeoutOrNull
  */
 internal suspend fun <T : Any> findResponsiveUploadService(
     candidates: List<T>,
+    onFailure: (Throwable) -> Unit = {},
     probe: suspend (T) -> Boolean,
 ): T? = coroutineScope {
     val found = CompletableDeferred<T?>()
@@ -23,10 +24,15 @@ internal suspend fun <T : Any> findResponsiveUploadService(
         launch {
             permits.withPermit {
                 val supported = try {
-                    withTimeoutOrNull(5_000) { probe(candidate) } == true
+                    val result = withTimeoutOrNull(5_000) { probe(candidate) }
+                    if (result == null) onFailure(java.util.concurrent.TimeoutException())
+                    result == true
                 } catch (cancelled: CancellationException) {
                     throw cancelled
-                } catch (_: Exception) { false }
+                } catch (error: Exception) {
+                    onFailure(error)
+                    false
+                }
                 if (supported) found.complete(candidate)
             }
         }

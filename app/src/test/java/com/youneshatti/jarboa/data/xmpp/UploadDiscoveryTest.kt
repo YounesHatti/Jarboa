@@ -10,6 +10,17 @@ import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class UploadDiscoveryTest {
+    @Test fun probeErrorsAndTimeoutsAreReportedButDoNotChangeDiscoveryResults() = runTest {
+        val failures = mutableListOf<Throwable>()
+        val result = findResponsiveUploadService(listOf("broken", "timeout"), onFailure = { failures.add(it) }) {
+            if (it == "broken") throw java.io.IOException("private server detail") else awaitCancellation()
+        }
+        assertNull(result)
+        assertTrue(failures.any { it is java.io.IOException })
+        assertTrue(failures.any { it is java.util.concurrent.TimeoutException })
+        assertEquals(5_000, testScheduler.currentTime)
+    }
+
     @Test fun unresponsiveServicesDoNotHideAWorkingUploadService() = runTest {
         var cancelled = 0
         val result = findResponsiveUploadService(listOf("slow1", "slow2", "slow3", "upload")) {

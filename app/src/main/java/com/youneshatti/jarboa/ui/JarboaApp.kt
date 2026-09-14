@@ -104,7 +104,7 @@ fun JarboaApp(viewModel: MainViewModel) {
         if (signedIn) {
             HomeScreen(viewModel = viewModel, busy = busy)
         } else {
-            SignInScreen(busy = busy, onSignIn = viewModel::signIn)
+            SignInScreen(busy = busy, onSignIn = viewModel::signIn, viewModel = viewModel)
         }
     }
 
@@ -122,6 +122,7 @@ fun JarboaApp(viewModel: MainViewModel) {
 private fun SignInScreen(
     busy: Boolean,
     onSignIn: (String, String, String, String) -> Unit,
+    viewModel: MainViewModel,
 ) {
     var jid by rememberSaveable { mutableStateOf("") }
     // Passwords must not enter Android's saved-instance-state Bundle.
@@ -217,6 +218,7 @@ private fun SignInScreen(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            ConnectionReport(viewModel)
             Spacer(Modifier.height(32.dp))
         }
     }
@@ -793,6 +795,7 @@ private fun SettingsScreen(
                 ConnectionLabel(state)
                 Spacer(Modifier.height(6.dp))
                 Text("TLS is required and certificate hostnames are validated.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                ConnectionReport(viewModel)
             }
         }
         item {
@@ -881,6 +884,27 @@ private fun SettingsScreen(
                 TextButton(onClick = { showThirdPartyNotices = false }) { Text("Close") }
             },
         )
+    }
+}
+
+@Composable
+private fun ConnectionReport(viewModel: MainViewModel) {
+    val report by viewModel.connectionDiagnostics.collectAsStateWithLifecycle()
+    var expanded by rememberSaveable { mutableStateOf(false) }
+    if (report.isNotBlank()) {
+        TextButton(onClick = { expanded = !expanded }) {
+            Text(if (expanded) "Hide connection report" else "Show connection report")
+        }
+        if (expanded) {
+            Text("Diagnostic report · Jarboa ${BuildConfig.VERSION_NAME}", fontWeight = FontWeight.Bold)
+            Text(
+                "Kept only while the app is running. No messages, addresses, passwords, file URLs or keys. Select text to copy; nothing is sent automatically.",
+                style = MaterialTheme.typography.bodySmall,
+            )
+            androidx.compose.foundation.text.selection.SelectionContainer {
+                Text(report, style = MaterialTheme.typography.bodySmall)
+            }
+        }
     }
 }
 
