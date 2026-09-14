@@ -17,13 +17,16 @@ import org.jxmpp.jid.DomainBareJid
 import java.lang.ref.WeakReference
 
 /** Upload discovery/slot IQs do not mutate OMEMO and must not hold its connection lock. */
-internal class XmppUploadClient {
+internal class XmppUploadClient(
+    private val diagnose: (XMPPConnection, ConnectionDiagnosticEvent, Throwable?) -> Unit = { _, _, _ -> },
+) {
     private val mutex = Mutex()
     private var cachedConnection = WeakReference<XMPPConnection>(null)
     private var cachedService: DomainBareJid? = null
 
     suspend fun request(connection: XMPPConnection, filename: String, size: Long): UploadSlot {
         var step = "Service discovery"
+        diagnose(connection, ConnectionDiagnosticEvent.UPLOAD_DISCOVERY, null)
         try {
             return withTimeoutOrNull(60_000) {
                 mutex.withLock {
@@ -38,7 +41,10 @@ internal class XmppUploadClient {
                         // Only server-advertised, node-less domain services are candidates. No guessed hosts.
                         val candidates = items.items.filter { it.node.isNullOrEmpty() }
                             .mapNotNull { it.entityID as? DomainBareJid }
-                        findResponsiveUploadService(listOf(connection.xmppServiceDomain) + candidates) { address ->
+                        findResponsiveUploadService(
+                            listOf(connection.xmppServiceDomain) + candidates,
+                            onFailure = { error -> diagnose(connection, ConnectionDiagnosticEvent.UPLOAD_PROBE_FAILED, error) },
+                        ) { address ->
                             runInterruptible(Dispatchers.IO) {
                                 val info = disco.discoverInfo(address)
                                 info.containsFeature(HttpFileUploadManager.NAMESPACE) ||
@@ -48,28 +54,30 @@ internal class XmppUploadClient {
                     }
                     cachedService = service
                     step = "Slot request"
+                    diagnose(connection, ConnectionDiagnosticEvent.UPLOAD_SLOT, null)
                     // Smack handles namespace version, advertised size limits and slot parsing.
                     val slot = try {
                         runInterruptible(Dispatchers.IO) {
                             upload.requestSlot(filename, size, "application/octet-stream", service)
                         }
                     } catch (error: Exception) { cachedService = null; throw error }
+                    diagnose(connection, ConnectionDiagnosticEvent.UPLOAD_SLOT_RECEIVED, null)
                     UploadSlot(slot.putUrl.toString(), slot.getUrl.toString(), slot.headers)
                 }
-            } ?: throw AttachmentTransferFailure("$step timed out.")
+            } ?: throw java.util.concurrent.TimeoutException()
         } catch (cancelled: CancellationException) { throw cancelled
-        } catch (error: AttachmentTransferFailure) { throw error
-        } catch (_: SmackException.NoResponseException) {
-            throw AttachmentTransferFailure("$step: the server did not respond.")
-        } catch (_: SmackException.NotConnectedException) {
-            throw AttachmentTransferFailure("$step: the XMPP connection was interrupted.")
-        } catch (error: XMPPException.XMPPErrorException) {
-            // Enum only: never include the server's free text, URLs or stanza contents.
-            throw AttachmentTransferFailure("$step: server returned ${error.stanzaError.condition}.")
-        } catch (_: IllegalArgumentException) {
-            throw AttachmentTransferFailure("$step: the service rejected the file size or returned invalid upload information.")
-        } catch (_: Exception) {
-            throw AttachmentTransferFailure("$step could not be completed.")
+        } catch (error: Exception) {
+            diagnose(connection, ConnectionDiagnosticEvent.UPLOAD_FAILED, error)
+            throw when (error) {
+                is AttachmentTransferFailure -> error
+                is java.util.concurrent.TimeoutException -> AttachmentTransferFailure("$step timed out.")
+                is SmackException.NoResponseException -> AttachmentTransferFailure("$step: the server did not respond.")
+                is SmackException.NotConnectedException -> AttachmentTransferFailure("$step: the XMPP connection was interrupted.")
+                // Enum only: never include the server's free text, URLs or stanza contents.
+                is XMPPException.XMPPErrorException -> AttachmentTransferFailure("$step: server returned ${error.stanzaError.condition}.")
+                is IllegalArgumentException -> AttachmentTransferFailure("$step: the service rejected the file size or returned invalid upload information.")
+                else -> AttachmentTransferFailure("$step could not be completed. See Connection report in Settings.")
+            }
         }
     }
 }
