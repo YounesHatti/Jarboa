@@ -30,8 +30,9 @@ local st = require "util.stanza"
 -- Reject the recovery fixture account's first two bundle publications. Authentication succeeds,
 -- but OMEMO must fail closed and then recover without UI interaction or another login.
 local rejected_bundles = 0
-module:hook("iq-set/bare/http://jabber.org/protocol/pubsub:pubsub", function(event)
-    if event.origin.username ~= "recovery" or rejected_bundles >= 2 then return end
+-- PEP consumes the generic iq/bare hook before typed iq-set hooks are dispatched.
+module:hook("iq/bare/http://jabber.org/protocol/pubsub:pubsub", function(event)
+    if event.stanza.attr.type ~= "set" or event.origin.username ~= "recovery" or rejected_bundles >= 2 then return end
     local pubsub = event.stanza:get_child("pubsub", "http://jabber.org/protocol/pubsub")
     local publish = pubsub and pubsub:get_child("publish")
     if not publish or not (publish.attr.node or ""):match("^eu%.siacs%.conversations%.axolotl%.bundles:") then return end
