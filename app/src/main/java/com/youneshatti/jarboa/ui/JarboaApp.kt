@@ -1,5 +1,7 @@
 package com.youneshatti.jarboa.ui
 
+import android.content.ClipData
+import android.content.ClipboardManager
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -890,15 +892,29 @@ private fun SettingsScreen(
 @Composable
 private fun ConnectionReport(viewModel: MainViewModel) {
     val report by viewModel.connectionDiagnostics.collectAsStateWithLifecycle()
+    val context = LocalContext.current
     var expanded by rememberSaveable { mutableStateOf(false) }
+    var copied by remember(report) { mutableStateOf(false) }
     if (report.isNotBlank()) {
+        TextButton(onClick = {
+            val clipboard = context.getSystemService(ClipboardManager::class.java) ?: return@TextButton
+            clipboard.setPrimaryClip(
+                ClipData.newPlainText(
+                    "Jarboa connection report",
+                    "Diagnostic report · Jarboa ${BuildConfig.VERSION_NAME}\n\n$report",
+                ),
+            )
+            copied = true
+        }) {
+            Text(if (copied) "Connection report copied" else "Copy connection report")
+        }
         TextButton(onClick = { expanded = !expanded }) {
             Text(if (expanded) "Hide connection report" else "Show connection report")
         }
         if (expanded) {
             Text("Diagnostic report · Jarboa ${BuildConfig.VERSION_NAME}", fontWeight = FontWeight.Bold)
             Text(
-                "Kept only while the app is running. No messages, addresses, passwords, file URLs or keys. Select text to copy; nothing is sent automatically.",
+                "Kept only while the app is running. No messages, addresses, passwords, file URLs or keys. Use Copy connection report to copy all the text; nothing is sent automatically.",
                 style = MaterialTheme.typography.bodySmall,
             )
             androidx.compose.foundation.text.selection.SelectionContainer {
