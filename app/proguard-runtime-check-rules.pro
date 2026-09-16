@@ -44,3 +44,8 @@
 -keep class com.youneshatti.jarboa.domain.model.** {
     public protected *;
 }
+
+# The parser regression test reads the local-only diagnostic result across APKs.
+-keep class com.youneshatti.jarboa.data.xmpp.ValidatingDiscoverInfoProvider$* { public *; }
+-keep class org.jivesoftware.smackx.disco.packet.DiscoverInfo { public *; }
+-keep class org.jivesoftware.smackx.disco.packet.DiscoverInfo$Identity { public *; }

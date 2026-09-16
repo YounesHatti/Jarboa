@@ -104,6 +104,17 @@ class OmemoRuntimeTest {
             assertFalse(alice.connectionDiagnostics.value.contains(slot.putUrl.toString()))
             assertTrue(slot.putUrl.startsWith("https://"))
             assertTrue(slot.getUrl.startsWith("https://"))
+            // A malformed discovery entry must not disconnect the session or hide valid
+            // upload capabilities. The fixture also proves extension/size limits survive.
+            withTimeout(5_000) {
+                alice.connectionDiagnostics.first { it.contains("DISCO_INVALID_FEATURE_VAR") }
+            }
+            assertFalse(alice.connectionDiagnostics.value.contains("STANZA_PARSE_FAILED"))
+            assertFalse(alice.connectionDiagnostics.value.contains("CONNECTION_ERROR"))
+            assertTrue(alice.connectionState.value is XmppConnectionState.Connected)
+            assertEquals(OmemoSessionStatus.READY, alice.omemoState.value.status)
+            assertTrue(runCatching { alice.requestUploadSlot("ci-too-large.jpg", 26214417) }.isFailure)
+            assertTrue(alice.connectionState.value is XmppConnectionState.Connected)
             val delayedSlot = async { alice.requestUploadSlot("ci-delayed.jpg", 1234) }
             delay(500)
             assertFalse("The slow-slot fixture must be active", delayedSlot.isCompleted)
