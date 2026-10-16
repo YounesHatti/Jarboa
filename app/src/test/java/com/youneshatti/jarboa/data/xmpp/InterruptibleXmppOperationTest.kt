@@ -14,6 +14,15 @@ import org.junit.Test
 
 class InterruptibleXmppOperationTest {
     @Test(timeout = 10_000)
+    fun completedNullableResultIsNotReportedAsATimeout() = runBlocking {
+        val mutex = Mutex()
+        val result: String? = interruptibleXmppOperation(mutex) { null }
+        assertNull(result)
+        assertFalse(mutex.isLocked)
+        assertEquals("ready", interruptibleXmppOperation(mutex) { "ready" })
+    }
+
+    @Test(timeout = 10_000)
     fun cancellationInterruptsBlockingWaitAndReleasesConnectionLock() = runBlocking {
         val mutex = Mutex()
         val entered = CompletableDeferred<Unit>()
