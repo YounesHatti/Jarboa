@@ -131,9 +131,28 @@ class SmackXmppClient(
                     }
                     TLSUtils.setEnabledTlsProtocolsToRecommended(builder)
 
+                    // Register before connection creation/login: upload discovery also runs
+                    // from Smack's authentication listener, not only when attaching a file.
+                    org.jivesoftware.smack.provider.ProviderManager.addIQProvider(
+                        org.jivesoftware.smackx.disco.packet.DiscoverInfo.ELEMENT,
+                        org.jivesoftware.smackx.disco.packet.DiscoverInfo.NAMESPACE,
+                        ValidatingDiscoverInfoProvider(),
+                    )
                     val newConnection = XMPPTCPConnection(builder.build())
                     connection = newConnection
                     recordDiagnostic(newConnection, ConnectionDiagnosticEvent.CONNECT_START)
+                    newConnection.addSyncStanzaListener({ stanza ->
+                        if (connection === newConnection && stanza is ValidatingDiscoverInfoProvider.Result) {
+                            stanza.invalidFields.forEach { field ->
+                                val event = when (field) {
+                                    ValidatingDiscoverInfoProvider.InvalidField.IDENTITY_CATEGORY -> ConnectionDiagnosticEvent.DISCO_INVALID_IDENTITY_CATEGORY
+                                    ValidatingDiscoverInfoProvider.InvalidField.IDENTITY_TYPE -> ConnectionDiagnosticEvent.DISCO_INVALID_IDENTITY_TYPE
+                                    ValidatingDiscoverInfoProvider.InvalidField.FEATURE_VAR -> ConnectionDiagnosticEvent.DISCO_INVALID_FEATURE_VAR
+                                }
+                                recordDiagnostic(newConnection, event)
+                            }
+                        }
+                    }, { it is ValidatingDiscoverInfoProvider.Result && it.invalidFields.isNotEmpty() })
                     // Observe the original parser failure without logging the raw stanza or
                     // changing Smack's existing fail-closed parsing behavior.
                     val originalParserCallback = newConnection.parsingExceptionCallback

@@ -27,6 +27,24 @@ module:hook("pre-message/full", audit_message, 1000)
 
 -- Deliberately slow slot response: OMEMO discovery and messaging must still work while it waits.
 local st = require "util.stanza"
+-- Malformed optional entries alongside valid upload metadata. Stock Smack 4.4.8 throws
+-- IllegalArgumentException while reading this and closes the authenticated connection.
+if module.host == "upload.jarboa.test" then
+    module:hook("iq-get/host/http://jabber.org/protocol/disco#info:query", function(event)
+        module:log("info", "JARBOA_TEST_INVALID_DISCO")
+        event.origin.send(st.reply(event.stanza):tag("query", { xmlns = "http://jabber.org/protocol/disco#info" })
+            :tag("identity", { type = "file" }):up()
+            :tag("identity", { category = "store", type = "" }):up()
+            :tag("feature", { var = "" }):up()
+            :tag("identity", { category = "store", type = "file" }):up()
+            :tag("feature", { var = "http://jabber.org/protocol/disco#info" }):up()
+            :tag("feature", { var = "urn:xmpp:http:upload:0" }):up()
+            :tag("x", { xmlns = "jabber:x:data", type = "result" })
+                :tag("field", { var = "FORM_TYPE", type = "hidden" }):text_tag("value", "urn:xmpp:http:upload:0"):up()
+                :tag("field", { var = "max-file-size" }):text_tag("value", "26214416"))
+        return true
+    end, 1000)
+end
 -- Reject the recovery fixture account's first two bundle publications. Authentication succeeds,
 -- but OMEMO must fail closed and then recover without UI interaction or another login.
 local rejected_bundles = 0

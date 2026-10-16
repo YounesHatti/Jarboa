@@ -8,6 +8,7 @@ internal enum class ConnectionDiagnosticEvent {
     CONNECT_START, TLS_CONNECTED, LOGIN_START, LOGIN_WAITING, AUTHENTICATED, LOGIN_RETURNED,
     CONNECT_FAILED, CONNECTION_CLOSED, CONNECTION_ERROR, RECONNECT_FAILED, STANZA_PARSE_FAILED,
     UPLOAD_DISCOVERY, UPLOAD_PROBE_FAILED, UPLOAD_SLOT, UPLOAD_SLOT_RECEIVED, UPLOAD_FAILED,
+    DISCO_INVALID_IDENTITY_CATEGORY, DISCO_INVALID_IDENTITY_TYPE, DISCO_INVALID_FEATURE_VAR,
 }
 
 /** Memory only, across reconnects but not sign-out/process death. Never accepts arbitrary text. */
@@ -17,6 +18,7 @@ internal class ConnectionDiagnostics(private val nanoTime: () -> Long = System::
     private var lastFailure: String? = null
     private var lastParserFailure: String? = null
     private var lastConnectionFailure: String? = null
+    private var lastDiscoveryWarning: String? = null
     private val mutableReport = MutableStateFlow("")
     val report = mutableReport.asStateFlow()
 
@@ -37,12 +39,14 @@ internal class ConnectionDiagnostics(private val nanoTime: () -> Long = System::
         if (error != null) lastFailure = entry
         if (event == ConnectionDiagnosticEvent.STANZA_PARSE_FAILED) lastParserFailure = entry
         if (event in connectionFailures) lastConnectionFailure = entry
+        if (event.name.startsWith("DISCO_INVALID_")) lastDiscoveryWarning = entry
         recent.addLast(entry)
         while (recent.size > 12) recent.removeFirst()
         mutableReport.value = buildString {
             lastParserFailure?.let { append("Last parser failure:\n").append(it).append("\n\n") }
             lastConnectionFailure?.let { append("Last connection failure:\n").append(it).append("\n\n") }
             lastFailure?.let { append("Last failure:\n").append(it).append("\n\n") }
+            lastDiscoveryWarning?.let { append("Last ignored invalid discovery entry:\n").append(it).append("\n\n") }
             append("Recent events (seconds since app session started):\n")
             append(recent.joinToString("\n"))
         }
@@ -54,6 +58,7 @@ internal class ConnectionDiagnostics(private val nanoTime: () -> Long = System::
         lastFailure = null
         lastParserFailure = null
         lastConnectionFailure = null
+        lastDiscoveryWarning = null
         mutableReport.value = ""
     }
 }

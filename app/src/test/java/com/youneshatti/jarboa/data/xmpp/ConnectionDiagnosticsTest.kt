@@ -7,6 +7,16 @@ import org.jivesoftware.smack.packet.StanzaError
 import org.jivesoftware.smack.packet.StreamError
 
 class ConnectionDiagnosticsTest {
+    @Test fun ignoredDiscoveryWarningSurvivesOrdinaryEventsAndClearsAtSignOut() {
+        val recorder = ConnectionDiagnostics { 0L }
+        recorder.record(ConnectionDiagnosticEvent.DISCO_INVALID_IDENTITY_TYPE, true, true)
+        repeat(15) { recorder.record(ConnectionDiagnosticEvent.UPLOAD_SLOT_RECEIVED, true, true) }
+        assertTrue(recorder.report.value.contains("Last ignored invalid discovery entry:\n+0s DISCO_INVALID_IDENTITY_TYPE"))
+        assertFalse(recorder.report.value.contains("Last failure:"))
+        recorder.clear()
+        assertEquals("", recorder.report.value)
+    }
+
     @Test fun reportExcludesPayloadsAddressesPathsAndKeys() {
         val secret = "alice@example.org https://upload.example/private#secret-key /data/user/password"
         val error = IllegalArgumentException(secret, java.io.IOException(secret))
